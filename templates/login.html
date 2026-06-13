@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>TaskRemind - Login</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%231a1a2e' stroke='%234fc3f7' stroke-width='4'/><circle cx='50' cy='30' r='2' fill='%234fc3f7'/><line x1='50' y1='50' x2='50' y2='25' stroke='%234fc3f7' stroke-width='3' stroke-linecap='round'/><line x1='50' y1='50' x2='70' y2='50' stroke='%234fc3f7' stroke-width='3' stroke-linecap='round'/></svg>">
+    <meta name="theme-color" content="#1a1a2e">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #e0e0e0;
+        }
+        .card {
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(12px);
+            border-radius: 24px;
+            padding: 40px 28px;
+            width: 90%;
+            max-width: 380px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        h1 { font-size: 28px; text-align: center; margin-bottom: 4px; }
+        .sub { text-align: center; color: #8899aa; font-size: 14px; margin-bottom: 28px; }
+        input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            background: rgba(255,255,255,0.05);
+            color: #e0e0e0;
+            font-size: 16px;
+            margin-bottom: 12px;
+            outline: none;
+            transition: border 0.2s;
+        }
+        input:focus { border-color: #4fc3f7; }
+        input::placeholder { color: #667788; }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-primary { background: #4fc3f7; color: #0a0a1a; }
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-secondary {
+            background: transparent;
+            color: #4fc3f7;
+            border: 1px solid #4fc3f7;
+            margin-top: 8px;
+        }
+        .error {
+            color: #ff6b6b;
+            font-size: 13px;
+            text-align: center;
+            margin-bottom: 12px;
+            min-height: 20px;
+        }
+        .toggle { text-align: center; margin-top: 16px; font-size: 14px; }
+        .toggle a { color: #4fc3f7; text-decoration: none; cursor: pointer; }
+        .pin-input { letter-spacing: 6px; font-size: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>⏰ TaskRemind</h1>
+        <p class="sub">Never forget a task again</p>
+        <div class="error" id="error"></div>
+        <form id="authForm">
+            <input type="text" id="username" placeholder="Username" autocomplete="username" required>
+            <input type="password" id="pin" class="pin-input" placeholder="PIN (4+ digits)" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="new-password" required>
+            <button type="submit" class="btn btn-primary" id="authBtn">Login</button>
+        </form>
+        <div class="toggle">
+            <span id="toggleText">Don't have an account?</span>
+            <a id="toggleLink">Register</a>
+        </div>
+    </div>
+
+    <script>
+        let isLogin = true;
+        const form = document.getElementById('authForm');
+        const errorEl = document.getElementById('error');
+        const authBtn = document.getElementById('authBtn');
+        const toggleLink = document.getElementById('toggleLink');
+        const toggleText = document.getElementById('toggleText');
+
+        toggleLink.addEventListener('click', () => {
+            isLogin = !isLogin;
+            authBtn.textContent = isLogin ? 'Login' : 'Register';
+            toggleText.textContent = isLogin ? "Don't have an account?" : "Already have an account?";
+            toggleLink.textContent = isLogin ? 'Register' : 'Login';
+            errorEl.textContent = '';
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const pin = document.getElementById('pin').value;
+            if (!username || pin.length < 4) {
+                errorEl.textContent = 'Username and PIN (4+ digits) required';
+                return;
+            }
+            authBtn.disabled = true;
+            authBtn.textContent = 'Loading...';
+            errorEl.textContent = '';
+
+            const endpoint = isLogin ? '/api/login' : '/api/register';
+            const data = new URLSearchParams({ username, pin });
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: data
+                });
+                if (!res.ok) {
+                    const msg = await res.text();
+                    throw new Error(msg.includes('taken') ? 'Username already taken' : msg.includes('Invalid') ? 'Invalid username or PIN' : 'Something went wrong');
+                }
+                window.location.href = '/';
+            } catch (err) {
+                errorEl.textContent = err.message;
+            } finally {
+                authBtn.disabled = false;
+                authBtn.textContent = isLogin ? 'Login' : 'Register';
+            }
+        });
+    </script>
+</body>
+</html>

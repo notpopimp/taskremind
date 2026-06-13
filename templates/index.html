@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>TaskRemind</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%231a1a2e' stroke='%234fc3f7' stroke-width='4'/><circle cx='50' cy='30' r='2' fill='%234fc3f7'/><line x1='50' y1='50' x2='50' y2='25' stroke='%234fc3f7' stroke-width='3' stroke-linecap='round'/><line x1='50' y1='50' x2='70' y2='50' stroke='%234fc3f7' stroke-width='3' stroke-linecap='round'/></svg>">
+    <meta name="theme-color" content="#1a1a2e">
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/service-worker.js');
+        }
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f23;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 0 0 80px 0;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            position: sticky; top: 0; z-index: 10;
+        }
+        .header h1 { font-size: 20px; }
+        .header-actions { display: flex; gap: 8px; }
+        .header-actions button {
+            background: rgba(255,255,255,0.08);
+            border: none; color: #ccc;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        /* Reminder Banner */
+        .reminder-banner {
+            display: none;
+            background: #ff6b6b22;
+            border: 1px solid #ff6b6b44;
+            margin: 12px 16px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+        }
+        .reminder-banner.show { display: block; }
+        .reminder-banner .title { font-weight: 600; color: #ff6b6b; margin-bottom: 4px; }
+        .reminder-banner .item {
+            padding: 4px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .reminder-banner .item .time { color: #8899aa; font-size: 12px; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0;
+            margin: 12px 16px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            font-size: 13px;
+            cursor: pointer;
+            color: #667788;
+            transition: all 0.2s;
+            border: none;
+            background: transparent;
+        }
+        .tab.active { color: #4fc3f7; background: rgba(79,195,247,0.1); font-weight: 600; }
+
+        /* Add Task */
+        .add-task {
+            margin: 12px 16px;
+            display: flex;
+            gap: 8px;
+        }
+        .add-task input {
+            flex: 1;
+            padding: 12px 14px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.05);
+            color: #e0e0e0;
+            font-size: 15px;
+            outline: none;
+        }
+        .add-task input:focus { border-color: #4fc3f7; }
+        .add-task input::placeholder { color: #556677; }
+        .add-task button {
+            padding: 12px 20px;
+            background: #4fc3f7;
+            border: none;
+            border-radius: 10px;
+            color: #0a0a1a;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* Date picker */
+        .due-row {
+            margin: 0 16px 12px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .due-row input[type="datetime-local"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            color: #e0e0e0;
+            font-size: 14px;
+            outline: none;
+        }
+
+        /* Tasks */
+        .task-list { margin: 0 16px; }
+        .task-item {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s;
+        }
+        .task-item.completed { opacity: 0.5; }
+        .task-item.completed .task-title { text-decoration: line-through; }
+        .task-item.overdue { border-color: #ff6b6b44; }
+        .task-check {
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            border: 2px solid #4fc3f7;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        .task-check.done { background: #4fc3f7; }
+        .task-check.done::after { content: '✓'; color: #0a0a1a; font-weight: bold; font-size: 14px; }
+        .task-info { flex: 1; min-width: 0; }
+        .task-title { font-size: 15px; font-weight: 500; }
+        .task-desc { font-size: 12px; color: #667788; margin-top: 2px; }
+        .task-due { font-size: 12px; color: #8899aa; margin-top: 2px; }
+        .task-due.urgent { color: #ff6b6b; }
+        .task-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .task-actions button {
+            background: rgba(255,255,255,0.06);
+            border: none;
+            color: #8899aa;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .task-actions button:hover { background: rgba(255,255,255,0.1); }
+        .task-actions .delete { color: #ff6b6b; }
+
+        /* Share Panel */
+        .share-panel {
+            margin: 12px 16px;
+            padding: 14px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .share-panel h3 { font-size: 14px; margin-bottom: 8px; color: #8899aa; }
+        .share-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+        .share-row input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #e0e0e0; font-size: 12px; }
+        .share-row select { padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: #1a1a2e; color: #e0e0e0; font-size: 12px; }
+        .share-row button { padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; }
+        .share-list { font-size: 13px; }
+        .share-item { display: flex; justify-content: space-between; padding: 4px 0; }
+        .share-item .delete-share { color: #ff6b6b; cursor: pointer; background: none; border: none; font-size: 12px; }
+
+        .empty {
+            text-align: center;
+            color: #556677;
+            padding: 40px 20px;
+            font-size: 14px;
+        }
+        .copy-toast {
+            position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+            background: #4fc3f7; color: #0a0a1a;
+            padding: 10px 20px; border-radius: 10px;
+            font-size: 14px; font-weight: 500;
+            display: none; z-index: 100;
+        }
+        .copy-toast.show { display: block; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⏰ TaskRemind</h1>
+        <div class="header-actions">
+            <button onclick="toggleSharePanel()">🔗 Share</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div class="reminder-banner" id="reminderBanner"></div>
+
+    <div class="add-task">
+        <input type="text" id="newTaskTitle" placeholder="New task..." maxlength="100">
+        <button onclick="addTask()">+ Add</button>
+    </div>
+    <div class="due-row">
+        <input type="datetime-local" id="newTaskDue">
+        <input type="text" id="newTaskDesc" placeholder="Description (optional)" style="flex:1;padding:10px;border:1px solid rgba(255,255,255,0.1);border-radius:8px;background:rgba(255,255,255,0.05);color:#e0e0e0;font-size:14px;outline:none;">
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('all',this)">All</button>
+        <button class="tab" onclick="switchTab('active',this)">Active</button>
+        <button class="tab" onclick="switchTab('overdue',this)">Overdue</button>
+        <button class="tab" onclick="switchTab('done',this)">Done</button>
+    </div>
+
+    <div class="task-list" id="taskList"></div>
+
+    <div class="share-panel" id="sharePanel" style="display:none;">
+        <h3>🔗 Share Your Task List</h3>
+        <div class="share-row">
+            <select id="sharePermission">
+                <option value="view">View only</option>
+                <option value="edit">Can edit</option>
+            </select>
+            <button onclick="createShare()" style="background:#4fc3f7;color:#0a0a1a;font-weight:600;">Create Link</button>
+        </div>
+        <div id="shareList"></div>
+    </div>
+
+    <div class="copy-toast" id="toast">Link copied!</div>
+
+    <script>
+        let tasks = [];
+        let currentTab = 'all';
+        let shareExpanded = false;
+
+        async function api(method, url, body) {
+            const opts = { method, headers: {} };
+            if (body instanceof URLSearchParams) {
+                opts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                opts.body = body;
+            } else if (body) {
+                opts.headers['Content-Type'] = 'application/json';
+                opts.body = JSON.stringify(body);
+            }
+            const res = await fetch(url, opts);
+            if (!res.ok) {
+                if (res.status === 401) { window.location.href = '/'; return; }
+                throw new Error(await res.text());
+            }
+            return res.json();
+        }
+
+        // Load tasks
+        async function loadTasks() {
+            tasks = await api('GET', '/api/tasks');
+            renderTasks();
+            checkReminders();
+        }
+
+        function renderTasks() {
+            let filtered = tasks;
+            if (currentTab === 'active') filtered = tasks.filter(t => !t.completed);
+            else if (currentTab === 'overdue') {
+                const now = new Date().toISOString();
+                filtered = tasks.filter(t => !t.completed && t.due_at && t.due_at < now);
+            }
+            else if (currentTab === 'done') filtered = tasks.filter(t => t.completed);
+
+            const list = document.getElementById('taskList');
+            if (filtered.length === 0) {
+                list.innerHTML = '<div class="empty">✨ No tasks here yet</div>';
+                return;
+            }
+
+            const now = new Date().toISOString();
+            list.innerHTML = filtered.map(t => {
+                const isOverdue = !t.completed && t.due_at && t.due_at < now;
+                const timeStr = t.due_at ? new Date(t.due_at + 'Z').toLocaleString() : '';
+                return `<div class="task-item ${t.completed ? 'completed' : ''} ${isOverdue ? 'overdue' : ''}">
+                    <div class="task-check ${t.completed ? 'done' : ''}" onclick="toggleTask('${t.id}')"></div>
+                    <div class="task-info">
+                        <div class="task-title">${esc(t.title)}</div>
+                        ${t.description ? `<div class="task-desc">${esc(t.description)}</div>` : ''}
+                        ${t.due_at ? `<div class="task-due ${isOverdue ? 'urgent' : ''}">${timeStr}${isOverdue ? ' ⏰ OVERDUE' : ''}</div>` : ''}
+                    </div>
+                    <div class="task-actions">
+                        ${t.due_at && !t.completed ? `<button onclick="extendTask('${t.id}')">+1h</button>` : ''}
+                        <button class="delete" onclick="deleteTask('${t.id}')">✕</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+        function switchTab(tab, btn) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            renderTasks();
+        }
+
+        async function addTask() {
+            const title = document.getElementById('newTaskTitle').value.trim();
+            if (!title) return;
+            const desc = document.getElementById('newTaskDesc').value.trim();
+            const dueInput = document.getElementById('newTaskDue').value;
+            const due_at = dueInput ? new Date(dueInput).toISOString() : null;
+            await api('POST', '/api/tasks', { title, description: desc, due_at });
+            document.getElementById('newTaskTitle').value = '';
+            document.getElementById('newTaskDesc').value = '';
+            document.getElementById('newTaskDue').value = '';
+            await loadTasks();
+        }
+
+        async function toggleTask(id) {
+            await api('POST', `/api/tasks/${id}/toggle`);
+            await loadTasks();
+        }
+
+        async function deleteTask(id) {
+            await api('DELETE', `/api/tasks/${id}`);
+            await loadTasks();
+        }
+
+        async function extendTask(id) {
+            const data = new URLSearchParams({ hours: '1' });
+            await api('POST', `/api/tasks/${id}/extend`, data);
+            await loadTasks();
+        }
+
+        // Reminders
+        async function checkReminders() {
+            const data = await api('GET', '/api/reminders');
+            const banner = document.getElementById('reminderBanner');
+            let html = '';
+            if (data.overdue.length > 0) {
+                html += `<div class="title">⏰ OVERDUE — needs attention!</div>`;
+                data.overdue.slice(0, 5).forEach(t => {
+                    html += `<div class="item"><span>${esc(t.title)}</span><span class="time">${new Date(t.due_at+'Z').toLocaleString()}</span></div>`;
+                });
+            }
+            if (data.soon.length > 0) {
+                html += `<div class="title" style="margin-top:8px;color:#ffa726;">⏳ Due within an hour:</div>`;
+                data.soon.slice(0, 3).forEach(t => {
+                    html += `<div class="item"><span>${esc(t.title)}</span><span class="time">${new Date(t.due_at+'Z').toLocaleString()}</span></div>`;
+                });
+            }
+            if (html) {
+                banner.innerHTML = html;
+                banner.classList.add('show');
+            } else {
+                banner.classList.remove('show');
+            }
+        }
+
+        // Share
+        function toggleSharePanel() {
+            shareExpanded = !shareExpanded;
+            document.getElementById('sharePanel').style.display = shareExpanded ? 'block' : 'none';
+            if (shareExpanded) loadShares();
+        }
+
+        async function loadShares() {
+            const shares = await api('GET', '/api/shares');
+            const list = document.getElementById('shareList');
+            if (shares.length === 0) {
+                list.innerHTML = '<div class="empty" style="padding:10px;">No share links yet</div>';
+                return;
+            }
+            list.innerHTML = shares.map(s =>
+                `<div class="share-item">
+                    <span>/${s.id} (${s.permission})</span>
+                    <button class="delete-share" onclick="deleteShare('${s.id}')">✕</button>
+                </div>`
+            ).join('');
+        }
+
+        async function createShare() {
+            const perm = document.getElementById('sharePermission').value;
+            const result = await api('POST', '/api/shares', new URLSearchParams({ permission: perm }));
+            const url = window.location.origin + result.url;
+            if (navigator.clipboard) {
+                await navigator.clipboard.writeText(url);
+                showToast('Link copied: ' + url);
+            } else {
+                prompt('Share this link:', url);
+            }
+            await loadShares();
+        }
+
+        async function deleteShare(id) {
+            await api('DELETE', `/api/shares/${id}`);
+            await loadShares();
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST' }).then(() => window.location.href = '/');
+        }
+
+        // Enter key for new task
+        document.getElementById('newTaskTitle').addEventListener('keydown', e => {
+            if (e.key === 'Enter') addTask();
+        });
+
+        // Check reminders every 60 seconds
+        setInterval(checkReminders, 60000);
+
+        // Initial load
+        loadTasks();
+    </script>
+</body>
+</html>
