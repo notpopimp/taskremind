@@ -27,7 +27,7 @@ DATABASE_URL = os.environ.get(
 conn_kwargs = {}
 
 def get_db():
-    url = os.environ.get("DATABASE_URL")
+    url = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_PUBLIC_URL")
     if url:
         conn = psycopg2.connect(url, cursor_factory=RealDictCursor)
     else:
