@@ -102,7 +102,6 @@ static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-
 # ---------- Helpers ----------
 def now_iso():
     return datetime.utcnow().isoformat()
