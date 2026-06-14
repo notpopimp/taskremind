@@ -1,1 +1,1 @@
-web: pip install --no-cache-dir --force-reinstall "starlette<1.0.0" "jinja2<3.2.0" && uvicorn main:app --host 0.0.0.0 --port $PORT
+web: uvicorn main:app --host 0.0.0.0 --port $PORT
