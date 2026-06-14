@@ -8,7 +8,7 @@ from pathlib import Path
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -544,6 +544,29 @@ def check_reminders(request: Request):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+# ---------- Export ----------
+@app.get("/api/export/{fmt}")
+def export_tasks(request: Request, fmt: str = "json"):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM tasks WHERE user_id = %s ORDER BY created_at DESC", (uid,))
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    if fmt == "csv":
+        import csv, io
+        buf = io.StringIO()
+        if rows:
+            w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
+        else:
+            buf.write("id,title,description,due_at,completed,completed_by,recurrence,created_at\n")
+        return Response(content=buf.getvalue(), media_type="text/csv",
+                        headers={"Content-Disposition": "attachment; filename=tasks.csv"})
+    return rows
 
 if __name__ == "__main__":
     import uvicorn
