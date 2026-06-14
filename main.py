@@ -10,7 +10,6 @@ from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -107,7 +106,17 @@ jinja_env = Environment(
     autoescape=select_autoescape(["html", "xml"]),
     cache_size=0,
 )
-templates = Jinja2Templates(env=jinja_env)
+
+class NoCacheTemplates:
+    """Bypass Starlette's broken Jinja2Templates cache (Starlette 1.0.0 bug)."""
+    def __init__(self, env):
+        self.env = env
+    def TemplateResponse(self, name, context):
+        template = self.env.get_template(name)
+        html = template.render(context)
+        return HTMLResponse(html)
+
+templates = NoCacheTemplates(jinja_env)
 # ---------- Helpers ----------
 def now_iso():
     return datetime.utcnow().isoformat()
