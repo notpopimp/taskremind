@@ -8,51 +8,53 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f0f23;
-            color: #e0e0e0;
+            background: #f0f2f5;
+            color: #1a1a2e;
             min-height: 100vh;
         }
         .header {
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            background: linear-gradient(135deg, #4165e1, #2a4fd6);
             padding: 16px 20px;
             text-align: center;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid rgba(255,255,255,0.15);
+            color: white;
         }
         .header h1 { font-size: 18px; }
-        .header .sub { font-size: 12px; color: #8899aa; margin-top: 4px; }
+        .header .sub { font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px; }
         .task-list { margin: 16px; }
         .task-item {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.06);
+            background: white;
+            border: 1px solid #e2e6ea;
             border-radius: 12px;
             padding: 14px 16px;
             margin-bottom: 8px;
             display: flex;
             align-items: center;
             gap: 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
         }
-        .task-item.completed { opacity: 0.5; }
+        .task-item.completed { opacity: 0.55; }
         .task-item.completed .task-title { text-decoration: line-through; }
         .task-check {
             width: 24px; height: 24px;
             border-radius: 50%;
-            border: 2px solid #4fc3f7;
+            border: 2px solid #4165e1;
             cursor: {{ 'pointer' if permission == 'edit' else 'default' }};
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
         }
-        .task-check.done { background: #4fc3f7; }
-        .task-check.done::after { content: '✓'; color: #0a0a1a; font-weight: bold; }
+        .task-check.done { background: #4165e1; }
+        .task-check.done::after { content: '✓'; color: white; font-weight: bold; }
         .task-info { flex: 1; }
-        .task-title { font-size: 15px; font-weight: 500; }
-        .task-due { font-size: 12px; color: #8899aa; margin-top: 2px; }
-        .empty { text-align: center; color: #556677; padding: 40px; }
+        .task-title { font-size: 15px; font-weight: 500; color: #1a1a2e; }
+        .task-due { font-size: 12px; color: #98a2b3; margin-top: 2px; }
+        .empty { text-align: center; color: #98a2b3; padding: 40px; }
         .badge {
             display: inline-block;
-            background: rgba(79,195,247,0.15);
-            color: #4fc3f7;
+            background: rgba(255,255,255,0.15);
+            color: white;
             padding: 2px 8px;
             border-radius: 6px;
             font-size: 11px;
@@ -95,7 +97,6 @@
             await fetch('/api/shared/{{ share_id }}/tasks/' + id + '/toggle', { method: 'POST' });
             location.reload();
         }
-        // Check reminders every refresh
         setInterval(() => location.reload(), 60000);
     </script>
     {% endif %}

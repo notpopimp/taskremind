@@ -77,9 +77,17 @@ def init_db():
             description TEXT DEFAULT '',
             due_at TEXT,
             completed INTEGER DEFAULT 0,
+            recurrence TEXT DEFAULT 'none',
             created_at TEXT NOT NULL
         )
     """)
+    # Add recurrence column if upgrading existing DB
+    cur.execute("""
+        SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_name='tasks' AND column_name='recurrence'
+    """)
+    if cur.fetchone()["count"] == 0:
+        cur.execute("ALTER TABLE tasks ADD COLUMN recurrence TEXT DEFAULT 'none'")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS shares (
             id TEXT PRIMARY KEY,
@@ -218,6 +226,35 @@ class TaskCreate(BaseModel):
     title: str
     description: str = ""
     due_at: str | None = None
+    recurrence: str = "none"
+
+# Recurrence patterns
+def next_recurrence(due_at: str, pattern: str) -> str | None:
+    """Calculate the next due date based on recurrence pattern."""
+    if pattern == "none" or not due_at:
+        return None
+    dt = datetime.fromisoformat(due_at)
+    if pattern == "daily":
+        return (dt + timedelta(days=1)).isoformat()
+    elif pattern == "weekly":
+        return (dt + timedelta(weeks=1)).isoformat()
+    elif pattern == "biweekly":
+        return (dt + timedelta(weeks=2)).isoformat()
+    elif pattern == "monthly":
+        month = dt.month + 1
+        year = dt.year + (month - 1) // 12
+        month = ((month - 1) % 12) + 1
+        day = min(dt.day, [31,29 if year%4==0 and (year%100!=0 or year%400==0) else 28,31,30,31,30,31,31,30,31,30,31][month-1])
+        return dt.replace(year=year, month=month, day=day).isoformat()
+    elif pattern == "quarterly":
+        month = dt.month + 3
+        year = dt.year + (month - 1) // 12
+        month = ((month - 1) % 12) + 1
+        day = min(dt.day, [31,29 if year%4==0 and (year%100!=0 or year%400==0) else 28,31,30,31,30,31,31,30,31,30,31][month-1])
+        return dt.replace(year=year, month=month, day=day).isoformat()
+    elif pattern == "yearly":
+        return dt.replace(year=dt.year + 1).isoformat()
+    return None
 
 @app.get("/api/tasks")
 def list_tasks(request: Request):
@@ -240,8 +277,8 @@ def create_task(request: Request, body: TaskCreate):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, created_at) VALUES (%s,%s,%s,%s,%s,0,%s) RETURNING *",
-        (task_id, uid, body.title, body.description, body.due_at or None, now_iso()),
+        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s) RETURNING *",
+        (task_id, uid, body.title, body.description, body.due_at or None, body.recurrence, now_iso()),
     )
     task = cur.fetchone()
     cur.close()
@@ -261,9 +298,19 @@ def toggle_task(request: Request, task_id: str):
         raise HTTPException(404, "Task not found")
     new_val = 0 if task["completed"] else 1
     cur.execute("UPDATE tasks SET completed = %s WHERE id = %s", (new_val, task_id))
+    # If completing a recurring task, create the next occurrence
+    next_id = None
+    if new_val == 1 and task["recurrence"] not in (None, "none"):
+        next_due = next_recurrence(task["due_at"], task["recurrence"])
+        if next_due:
+            next_id = uuid.uuid4().hex[:12]
+            cur.execute(
+                "INSERT INTO tasks (id, user_id, title, description, due_at, completed, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s)",
+                (next_id, uid, task["title"], task["description"], next_due, task["recurrence"], now_iso()),
+            )
     cur.close()
     conn.close()
-    return {"ok": True, "completed": bool(new_val)}
+    return {"ok": True, "completed": bool(new_val), "next_id": next_id}
 
 @app.delete("/api/tasks/{task_id}")
 def delete_task(request: Request, task_id: str):
@@ -297,6 +344,23 @@ def extend_task(request: Request, task_id: str, body: ExtendRequest = None):
     cur.close()
     conn.close()
     return {"ok": True, "due_at": new_due}
+
+# ---------- Calendar Route ----------
+@app.get("/api/tasks/calendar")
+def calendar_tasks(request: Request):
+    """Get tasks grouped by day for a given month."""
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    now = now_iso()
+    cur.execute(
+        "SELECT * FROM tasks WHERE user_id = %s AND completed = 0 AND due_at IS NOT NULL ORDER BY due_at ASC",
+        (uid,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(r) for r in rows]
 
 # ---------- Share Routes ----------
 @app.post("/api/shares")

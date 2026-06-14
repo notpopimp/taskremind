@@ -1,15 +1,14 @@
 {
     "name": "TaskRemind",
-    "short_name": "TaskRemind",
-    "description": "Simple task reminder app with shareable links",
+    "short_name": "Tasks",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#0f0f23",
-    "theme_color": "#1a1a2e",
+    "background_color": "#f0f2f5",
+    "theme_color": "#4165e1",
     "icons": [
         {
-            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%231a1a2e' stroke='%234fc3f7' stroke-width='4'/><circle cx='50' cy='30' r='2' fill='%234fc3f7'/><line x1='50' y1='50' x2='50' y2='25' stroke='%234fc3f7' stroke-width='3' stroke-linecap='round'/><line x1='50' y1='50' x2='70' y2='50' stroke='%234fc3f7' stroke-width='3' stroke-linecap='round'/></svg>",
-            "sizes": "any",
+            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%234165e1' stroke='%23ffffff' stroke-width='4'/><circle cx='50' cy='30' r='2' fill='%23ffffff'/><line x1='50' y1='50' x2='50' y2='25' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'/><line x1='50' y1='50' x2='70' y2='50' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'/></svg>",
+            "sizes": "192x192",
             "type": "image/svg+xml"
         }
     ]
