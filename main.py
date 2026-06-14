@@ -33,6 +33,8 @@ class TaskCreate(BaseModel):
     description: str = ""
     due_at: str | None = None
     recurrence: str = "none"
+    priority: str = "medium"
+    category: str = ""
 
 class TaskToggle(BaseModel):
     completed_by: str | None = None
@@ -81,7 +83,8 @@ def init_db():
         )
     """)
     # Add columns if upgrading
-    for col, dtype in [("completed_by", "TEXT DEFAULT ''"), ("recurrence", "TEXT DEFAULT 'none'")]:
+    for col, dtype in [("completed_by", "TEXT DEFAULT ''"), ("recurrence", "TEXT DEFAULT 'none'"),
+                       ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='tasks' AND column_name='{col}'
@@ -279,8 +282,8 @@ def create_task(request: Request, body: TaskCreate):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s) RETURNING *",
-        (task_id, uid, body.title, body.description, body.due_at or None, body.recurrence, now_iso()),
+        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s) RETURNING *",
+        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now_iso()),
     )
     task = cur.fetchone()
     cur.close()
@@ -313,8 +316,8 @@ def toggle_task(request: Request, task_id: str, body: TaskToggle = None):
         if next_due:
             next_id = uuid.uuid4().hex[:12]
             cur.execute(
-                "INSERT INTO tasks (id, user_id, title, description, due_at, completed, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s)",
-                (next_id, uid, task["title"], task["description"], next_due, task["recurrence"], now_iso()),
+                "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s)",
+                (next_id, uid, task["title"], task["description"], next_due, task.get("priority","medium"), task.get("category",""), task["recurrence"], now_iso()),
             )
     cur.close()
     conn.close()
