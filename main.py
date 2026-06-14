@@ -77,6 +77,7 @@ def init_db():
             description TEXT DEFAULT '',
             due_at TEXT,
             completed INTEGER DEFAULT 0,
+            completed_by TEXT DEFAULT NULL,
             recurrence TEXT DEFAULT 'none',
             created_at TEXT NOT NULL
         )
@@ -88,6 +89,13 @@ def init_db():
     """)
     if cur.fetchone()["count"] == 0:
         cur.execute("ALTER TABLE tasks ADD COLUMN recurrence TEXT DEFAULT 'none'")
+    # Add completed_by column if upgrading
+    cur.execute("""
+        SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_name='tasks' AND column_name='completed_by'
+    """)
+    if cur.fetchone()["count"] == 0:
+        cur.execute("ALTER TABLE tasks ADD COLUMN completed_by TEXT DEFAULT NULL")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS shares (
             id TEXT PRIMARY KEY,
@@ -285,8 +293,13 @@ def create_task(request: Request, body: TaskCreate):
     conn.close()
     return dict(task)
 
+class ToggleRequest(BaseModel):
+    completed_by: str | None = None
+
 @app.post("/api/tasks/{task_id}/toggle")
-def toggle_task(request: Request, task_id: str):
+def toggle_task(request: Request, task_id: str, body: ToggleRequest = None):
+    if body is None:
+        body = ToggleRequest()
     uid = get_user(request)
     conn = get_db()
     cur = conn.cursor()
@@ -297,7 +310,11 @@ def toggle_task(request: Request, task_id: str):
         conn.close()
         raise HTTPException(404, "Task not found")
     new_val = 0 if task["completed"] else 1
-    cur.execute("UPDATE tasks SET completed = %s WHERE id = %s", (new_val, task_id))
+    completed_by = body.completed_by if new_val == 1 else None
+    cur.execute(
+        "UPDATE tasks SET completed = %s, completed_by = %s WHERE id = %s",
+        (new_val, completed_by, task_id)
+    )
     # If completing a recurring task, create the next occurrence
     next_id = None
     if new_val == 1 and task["recurrence"] not in (None, "none"):
