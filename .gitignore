@@ -3,3 +3,8 @@ __pycache__/
 .env
 tasks.db
 .railway/
+token.txt
+.github_token
+.ghe_token
+upload_remaining.sh
+*.token
