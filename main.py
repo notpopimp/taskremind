@@ -7,11 +7,26 @@ from pathlib import Path
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from fastapi import FastAPI, HTTPException, Request, Form
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+
+# ---------- Request Models (JSON body, no python-multipart needed) ----------
+class LoginRequest(BaseModel):
+    username: str
+    pin: str
+
+class RegisterRequest(BaseModel):
+    username: str
+    pin: str
+
+class ExtendRequest(BaseModel):
+    hours: int = 1
+
+class ShareRequest(BaseModel):
+    permission: str = "view"
 
 # ---------- Database ----------
 DATABASE_URL = os.environ.get(
@@ -111,14 +126,14 @@ def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "user_id": user_id})
 
 @app.post("/api/login")
-def login(username: str = Form(...), pin: str = Form(...)):
+def login(body: LoginRequest):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+    cur.execute("SELECT * FROM users WHERE username = %s", (body.username,))
     user = cur.fetchone()
     cur.close()
     conn.close()
-    if user and user["pin_hash"] == hash_pin(pin):
+    if user and user["pin_hash"] == hash_pin(body.pin):
         token = make_token()
         SESSIONS[token] = user["id"]
         resp = JSONResponse({"ok": True, "token": token, "user_id": user["id"]})
@@ -127,10 +142,10 @@ def login(username: str = Form(...), pin: str = Form(...)):
     raise HTTPException(401, "Invalid username or PIN")
 
 @app.post("/api/register")
-def register(username: str = Form(...), pin: str = Form(...)):
+def register(body: RegisterRequest):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+    cur.execute("SELECT id FROM users WHERE username = %s", (body.username,))
     if cur.fetchone():
         cur.close()
         conn.close()
@@ -138,7 +153,7 @@ def register(username: str = Form(...), pin: str = Form(...)):
     user_id = uuid.uuid4().hex[:12]
     cur.execute(
         "INSERT INTO users (id, username, pin_hash, created_at) VALUES (%s, %s, %s, %s)",
-        (user_id, username, hash_pin(pin), now_iso()),
+        (user_id, body.username, hash_pin(body.pin), now_iso()),
     )
     cur.close()
     conn.close()
@@ -224,7 +239,9 @@ def delete_task(request: Request, task_id: str):
     return {"ok": True}
 
 @app.post("/api/tasks/{task_id}/extend")
-def extend_task(request: Request, task_id: str, hours: int = Form(1)):
+def extend_task(request: Request, task_id: str, body: ExtendRequest = None):
+    if body is None:
+        body = ExtendRequest()
     uid = get_user(request)
     conn = get_db()
     cur = conn.cursor()
@@ -236,9 +253,9 @@ def extend_task(request: Request, task_id: str, hours: int = Form(1)):
         raise HTTPException(404, "Task not found")
     old_due = task["due_at"]
     if old_due:
-        new_due = (datetime.fromisoformat(old_due) + timedelta(hours=hours)).isoformat()
+        new_due = (datetime.fromisoformat(old_due) + timedelta(hours=body.hours)).isoformat()
     else:
-        new_due = (datetime.utcnow() + timedelta(hours=hours)).isoformat()
+        new_due = (datetime.utcnow() + timedelta(hours=body.hours)).isoformat()
     cur.execute("UPDATE tasks SET due_at = %s, completed = 0 WHERE id = %s", (new_due, task_id))
     cur.close()
     conn.close()
@@ -246,16 +263,18 @@ def extend_task(request: Request, task_id: str, hours: int = Form(1)):
 
 # ---------- Share Routes ----------
 @app.post("/api/shares")
-def create_share(request: Request, permission: str = Form("view")):
+def create_share(request: Request, body: ShareRequest = None):
+    if body is None:
+        body = ShareRequest()
     uid = get_user(request)
-    if permission not in ("view", "edit"):
+    if body.permission not in ("view", "edit"):
         raise HTTPException(400, "Permission must be 'view' or 'edit'")
     share_id = uuid.uuid4().hex[:8]
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
         "INSERT INTO shares (id, user_id, permission, created_at) VALUES (%s,%s,%s,%s)",
-        (share_id, uid, permission, now_iso()),
+        (share_id, uid, body.permission, now_iso()),
     )
     cur.close()
     conn.close()

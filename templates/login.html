@@ -118,11 +118,11 @@
             errorEl.textContent = '';
 
             const endpoint = isLogin ? '/api/login' : '/api/register';
-            const data = new URLSearchParams({ username, pin });
+            const data = JSON.stringify({ username, pin });
             try {
                 const res = await fetch(endpoint, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: data
                 });
                 if (!res.ok) {
