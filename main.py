@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-# ---------- Request Models (JSON body, no python-multipart needed) ----------
+# ---------- Request Models ----------
 class LoginRequest(BaseModel):
     username: str
     pin: str
@@ -28,25 +28,24 @@ class ExtendRequest(BaseModel):
 class ShareRequest(BaseModel):
     permission: str = "view"
 
+class TaskCreate(BaseModel):
+    title: str
+    description: str = ""
+    due_at: str | None = None
+    recurrence: str = "none"
+
+class TaskToggle(BaseModel):
+    completed_by: str | None = None
+
+class NotePut(BaseModel):
+    content: str = ""
+
 # ---------- Database ----------
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    # Local fallback if you have PostgreSQL running:
-    # or comment out to use SQLite fallback via an in-memory mode
-    # For now: use a small helper that wraps psycopg2
-)
-
-# We'll default to a local PostgreSQL or you can set DATABASE_URL
-# Railway auto-injects DATABASE_URL when you add PostgreSQL.
-
-conn_kwargs = {}
-
 def get_db():
     url = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_PUBLIC_URL")
     if url:
         conn = psycopg2.connect(url, cursor_factory=RealDictCursor)
     else:
-        # Local dev fallback: connect to a local PG instance
         conn = psycopg2.connect(
             dbname="taskapp",
             user="postgres",
@@ -56,7 +55,6 @@ def get_db():
         )
     conn.autocommit = True
     return conn
-
 
 def init_db():
     conn = get_db()
@@ -77,32 +75,26 @@ def init_db():
             description TEXT DEFAULT '',
             due_at TEXT,
             completed INTEGER DEFAULT 0,
-            completed_by TEXT DEFAULT NULL,
+            completed_by TEXT DEFAULT '',
             recurrence TEXT DEFAULT 'none',
             created_at TEXT NOT NULL
         )
     """)
-    # Add recurrence column if upgrading existing DB
+    # Add columns if upgrading
+    for col, dtype in [("completed_by", "TEXT DEFAULT ''"), ("recurrence", "TEXT DEFAULT 'none'")]:
+        cur.execute(f"""
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_name='tasks' AND column_name='{col}'
+        """)
+        if cur.fetchone()["count"] == 0:
+            cur.execute(f"ALTER TABLE tasks ADD COLUMN {col} {dtype}")
+    # Notes table
     cur.execute("""
-        SELECT COUNT(*) FROM information_schema.columns
-        WHERE table_name='tasks' AND column_name='recurrence'
-    """)
-    if cur.fetchone()["count"] == 0:
-        cur.execute("ALTER TABLE tasks ADD COLUMN recurrence TEXT DEFAULT 'none'")
-    # Add completed_by column if upgrading
-    cur.execute("""
-        SELECT COUNT(*) FROM information_schema.columns
-        WHERE table_name='tasks' AND column_name='completed_by'
-    """)
-    if cur.fetchone()["count"] == 0:
-        cur.execute("ALTER TABLE tasks ADD COLUMN completed_by TEXT DEFAULT NULL")
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS day_notes (
-            id TEXT PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS notes (
             user_id TEXT NOT NULL REFERENCES users(id),
-            note_date TEXT NOT NULL,
+            date TEXT NOT NULL,
             content TEXT DEFAULT '',
-            UNIQUE(user_id, note_date)
+            PRIMARY KEY (user_id, date)
         )
     """)
     cur.execute("""
@@ -156,6 +148,7 @@ def startup():
 @app.get("/_health")
 def health():
     return {"status": "ok", "db": db_ready}
+
 # ---------- Helpers ----------
 def now_iso():
     return datetime.utcnow().isoformat()
@@ -166,19 +159,52 @@ def hash_pin(pin: str) -> str:
 def make_token():
     return secrets.token_hex(32)
 
-# In-memory sessions
 SESSIONS: dict[str, str] = {}
+
+def get_user(request: Request) -> str:
+    token = request.cookies.get("session")
+    uid = SESSIONS.get(token) if token else None
+    if not uid:
+        raise HTTPException(401, "Not logged in")
+    return uid
+
+# Recurrence patterns
+def next_recurrence(due_at: str, pattern: str) -> str | None:
+    if pattern == "none" or not due_at:
+        return None
+    dt = datetime.fromisoformat(due_at)
+    if pattern == "daily":
+        return (dt + timedelta(days=1)).isoformat()
+    elif pattern == "weekly":
+        return (dt + timedelta(weeks=1)).isoformat()
+    elif pattern == "biweekly":
+        return (dt + timedelta(weeks=2)).isoformat()
+    elif pattern == "monthly":
+        month = dt.month + 1
+        year = dt.year + (month - 1) // 12
+        month = ((month - 1) % 12) + 1
+        day = min(dt.day, [31,29 if year%4==0 and (year%100!=0 or year%400==0) else 28,31,30,31,30,31,31,30,31,30,31][month-1])
+        return dt.replace(year=year, month=month, day=day).isoformat()
+    elif pattern == "quarterly":
+        month = dt.month + 3
+        year = dt.year + (month - 1) // 12
+        month = ((month - 1) % 12) + 1
+        day = min(dt.day, [31,29 if year%4==0 and (year%100!=0 or year%400==0) else 28,31,30,31,30,31,31,30,31,30,31][month-1])
+        return dt.replace(year=year, month=month, day=day).isoformat()
+    elif pattern == "yearly":
+        return dt.replace(year=dt.year + 1).isoformat()
+    return None
 
 # ---------- Auth Routes ----------
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     if not db_ready:
         return HTMLResponse("""
-        <html><body style="font-family:sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh">
+        <html><body style="font-family:sans-serif;background:#f0f2f5;color:#1a1a2e;display:flex;align-items:center;justify-content:center;height:100vh">
         <div style="text-align:center">
-            <h1>⏰ TaskRemind</h1>
-            <p style="color:#ff6b6b">Database not configured yet.</p>
-            <p>Set <code>DATABASE_URL</code> in Railway Variables → PostgreSQL → Reference, then redeploy.</p>
+            <h1 style="color:#4165e1">⏰ TaskRemind</h1>
+            <p style="color:#e53935">Database not configured yet.</p>
+            <p style="color:#98a2b3">Set <code>DATABASE_URL</code> in Railway Variables, then redeploy.</p>
         </div></body></html>
         """, status_code=200)
     token = request.cookies.get("session")
@@ -231,48 +257,7 @@ def logout():
     resp.delete_cookie("session")
     return resp
 
-def get_user(request: Request) -> str:
-    token = request.cookies.get("session")
-    uid = SESSIONS.get(token) if token else None
-    if not uid:
-        raise HTTPException(401, "Not logged in")
-    return uid
-
 # ---------- Task Routes ----------
-class TaskCreate(BaseModel):
-    title: str
-    description: str = ""
-    due_at: str | None = None
-    recurrence: str = "none"
-
-# Recurrence patterns
-def next_recurrence(due_at: str, pattern: str) -> str | None:
-    """Calculate the next due date based on recurrence pattern."""
-    if pattern == "none" or not due_at:
-        return None
-    dt = datetime.fromisoformat(due_at)
-    if pattern == "daily":
-        return (dt + timedelta(days=1)).isoformat()
-    elif pattern == "weekly":
-        return (dt + timedelta(weeks=1)).isoformat()
-    elif pattern == "biweekly":
-        return (dt + timedelta(weeks=2)).isoformat()
-    elif pattern == "monthly":
-        month = dt.month + 1
-        year = dt.year + (month - 1) // 12
-        month = ((month - 1) % 12) + 1
-        day = min(dt.day, [31,29 if year%4==0 and (year%100!=0 or year%400==0) else 28,31,30,31,30,31,31,30,31,30,31][month-1])
-        return dt.replace(year=year, month=month, day=day).isoformat()
-    elif pattern == "quarterly":
-        month = dt.month + 3
-        year = dt.year + (month - 1) // 12
-        month = ((month - 1) % 12) + 1
-        day = min(dt.day, [31,29 if year%4==0 and (year%100!=0 or year%400==0) else 28,31,30,31,30,31,31,30,31,30,31][month-1])
-        return dt.replace(year=year, month=month, day=day).isoformat()
-    elif pattern == "yearly":
-        return dt.replace(year=dt.year + 1).isoformat()
-    return None
-
 @app.get("/api/tasks")
 def list_tasks(request: Request):
     uid = get_user(request)
@@ -302,13 +287,8 @@ def create_task(request: Request, body: TaskCreate):
     conn.close()
     return dict(task)
 
-class ToggleRequest(BaseModel):
-    completed_by: str | None = None
-
 @app.post("/api/tasks/{task_id}/toggle")
-def toggle_task(request: Request, task_id: str, body: ToggleRequest = None):
-    if body is None:
-        body = ToggleRequest()
+def toggle_task(request: Request, task_id: str, body: TaskToggle = None):
     uid = get_user(request)
     conn = get_db()
     cur = conn.cursor()
@@ -319,14 +299,16 @@ def toggle_task(request: Request, task_id: str, body: ToggleRequest = None):
         conn.close()
         raise HTTPException(404, "Task not found")
     new_val = 0 if task["completed"] else 1
-    completed_by = body.completed_by if new_val == 1 else None
+    completed_by = ""
+    if new_val == 1 and body and body.completed_by:
+        completed_by = body.completed_by
     cur.execute(
         "UPDATE tasks SET completed = %s, completed_by = %s WHERE id = %s",
-        (new_val, completed_by, task_id)
+        (new_val, completed_by, task_id),
     )
-    # If completing a recurring task, create the next occurrence
+    # Recurring: create next occurrence
     next_id = None
-    if new_val == 1 and task["recurrence"] not in (None, "none"):
+    if new_val == 1 and task["recurrence"] not in (None, "none", ""):
         next_due = next_recurrence(task["due_at"], task["recurrence"])
         if next_due:
             next_id = uuid.uuid4().hex[:12]
@@ -374,11 +356,9 @@ def extend_task(request: Request, task_id: str, body: ExtendRequest = None):
 # ---------- Calendar Route ----------
 @app.get("/api/tasks/calendar")
 def calendar_tasks(request: Request):
-    """Get tasks grouped by day for a given month."""
     uid = get_user(request)
     conn = get_db()
     cur = conn.cursor()
-    now = now_iso()
     cur.execute(
         "SELECT * FROM tasks WHERE user_id = %s AND completed = 0 AND due_at IS NOT NULL ORDER BY due_at ASC",
         (uid,),
@@ -387,6 +367,44 @@ def calendar_tasks(request: Request):
     cur.close()
     conn.close()
     return [dict(r) for r in rows]
+
+# ---------- Notes Routes ----------
+@app.get("/api/notes")
+def list_note_dates(request: Request):
+    """Return list of date strings that have notes for this user."""
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT date FROM notes WHERE user_id = %s AND content != ''", (uid,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [r["date"] for r in rows]
+
+@app.get("/api/notes/{date}")
+def get_note(request: Request, date: str):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT content FROM notes WHERE user_id = %s AND date = %s", (uid, date))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return {"content": row["content"] if row else ""}
+
+@app.put("/api/notes/{date}")
+def save_note(request: Request, date: str, body: NotePut):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO notes (user_id, date, content) VALUES (%s, %s, %s) "
+        "ON CONFLICT (user_id, date) DO UPDATE SET content = EXCLUDED.content",
+        (uid, date, body.content),
+    )
+    cur.close()
+    conn.close()
+    return {"ok": True}
 
 # ---------- Share Routes ----------
 @app.post("/api/shares")
@@ -456,7 +474,6 @@ def shared_view(request: Request, share_id: str):
         "tasks": [dict(t) for t in tasks],
     })
 
-# ---------- API for shared tasks ----------
 @app.get("/api/shared/{share_id}/tasks")
 def get_shared_tasks(share_id: str):
     conn = get_db()
@@ -524,58 +541,9 @@ def check_reminders(request: Request):
     conn.close()
     return {"overdue": [dict(t) for t in overdue], "soon": [dict(t) for t in soon]}
 
-# ---------- Health Check (Railway uses this) ----------
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-# ---------- Day Notes ----------
-class NoteBody(BaseModel):
-    content: str = ""
-
-@app.get("/api/notes/{note_date}")
-def get_note(request: Request, note_date: str):
-    """Get note for a specific date (YYYY-MM-DD)."""
-    uid = get_user(request)
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM day_notes WHERE user_id = %s AND note_date = %s", (uid, note_date))
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-    if row:
-        return dict(row)
-    return {"content": ""}
-
-@app.put("/api/notes/{note_date}")
-def save_note(request: Request, note_date: str, body: NoteBody):
-    """Upsert note for a specific date."""
-    uid = get_user(request)
-    note_id = uuid.uuid4().hex[:12]
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """INSERT INTO day_notes (id, user_id, note_date, content)
-           VALUES (%s, %s, %s, %s)
-           ON CONFLICT (user_id, note_date)
-           DO UPDATE SET content = EXCLUDED.content""",
-        (note_id, uid, note_date, body.content),
-    )
-    cur.close()
-    conn.close()
-    return {"ok": True}
-
-@app.get("/api/notes")
-def list_notes(request: Request):
-    """Get all dates that have notes (for calendar dots)."""
-    uid = get_user(request)
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT note_date FROM day_notes WHERE user_id = %s AND content != ''", (uid,))
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-    return [r["note_date"] for r in rows]
 
 if __name__ == "__main__":
     import uvicorn
