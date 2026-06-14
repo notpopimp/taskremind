@@ -563,13 +563,11 @@
         let pendingCompleteId = null;
         let dayNotesCache = {};
 
-        // --- Helper: safe date parsing (handles both with & without Z suffix) ---
+        // --- Helper: dates stored as local ISO (no timezone). Parse as local. ---
         function parseDate(str) {
             if (!str) return null;
             try {
-                // If it already ends with Z, don't add another one
-                const s = str.endsWith('Z') ? str : str + 'Z';
-                return new Date(s);
+                return new Date(str);
             } catch(e) {
                 return null;
             }
@@ -603,6 +601,15 @@
             renderTasks();
             if (currentView === 'calendar') renderCalendar();
             checkReminders();
+        }
+
+        // --- Load note dates for calendar dots ---
+        async function loadNoteDates() {
+            const dates = await api('GET', '/api/notes');
+            if (dates === null) return;
+            dayNotesCache = {};
+            dates.forEach(d => { dayNotesCache[d] = ' '; });
+            if (currentView === 'calendar') renderCalendar();
         }
 
         // --- List view ---
@@ -680,8 +687,7 @@
             const firstDay = new Date(calYear, calMonth, 1).getDay();
             const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
             const today = new Date();
-            const todayStr = today.toISOString().slice(0,10);
-            const nowISO = today.toISOString();
+            const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
             // Build day -> tasks map
             const dayMap = {};
@@ -717,9 +723,11 @@
                 const hasNote = noteDays.has(dateStr);
                 let dots = '';
                 dayTasks.forEach(t => {
+                    const dt = parseDate(t.due_at);
                     let cls = 'future';
-                    if (t.due_at < nowISO) cls = 'overdue';
-                    else if (parseDate(t.due_at) && parseDate(t.due_at) < new Date(Date.now() + 3600000)) cls = 'due-soon';
+                    if (!dt) cls = 'future';
+                    else if (dt < today) cls = 'overdue';
+                    else if (dt < new Date(Date.now() + 3600000)) cls = 'due-soon';
                     dots += `<div class="cal-dot ${cls}"></div>`;
                 });
                 if (hasNote) dots += `<div class="cal-dot note"></div>`;
@@ -848,8 +856,10 @@
             const recurrence = document.getElementById('newTaskRecur').value;
             let due_at = null;
             if (dueInput) {
-                // Remove the trailing Z if toISOString adds it
-                due_at = new Date(dueInput).toISOString();
+                // Store as local date string (NO timezone conversion)
+                // datetime-local format: "2026-06-14T22:00"
+                // Append :00 for seconds to make valid ISO local datetime
+                due_at = dueInput + ':00';
             }
             document.getElementById('newTaskTitle').value = '';
             document.getElementById('newTaskDue').value = '';
@@ -969,6 +979,7 @@
 
         // Initial load
         loadTasks();
+        loadNoteDates();
     </script>
 </body>
 </html>

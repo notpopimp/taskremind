@@ -97,6 +97,15 @@ def init_db():
     if cur.fetchone()["count"] == 0:
         cur.execute("ALTER TABLE tasks ADD COLUMN completed_by TEXT DEFAULT NULL")
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS day_notes (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            note_date TEXT NOT NULL,
+            content TEXT DEFAULT '',
+            UNIQUE(user_id, note_date)
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS shares (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL REFERENCES users(id),
@@ -519,6 +528,54 @@ def check_reminders(request: Request):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+# ---------- Day Notes ----------
+class NoteBody(BaseModel):
+    content: str = ""
+
+@app.get("/api/notes/{note_date}")
+def get_note(request: Request, note_date: str):
+    """Get note for a specific date (YYYY-MM-DD)."""
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM day_notes WHERE user_id = %s AND note_date = %s", (uid, note_date))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if row:
+        return dict(row)
+    return {"content": ""}
+
+@app.put("/api/notes/{note_date}")
+def save_note(request: Request, note_date: str, body: NoteBody):
+    """Upsert note for a specific date."""
+    uid = get_user(request)
+    note_id = uuid.uuid4().hex[:12]
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO day_notes (id, user_id, note_date, content)
+           VALUES (%s, %s, %s, %s)
+           ON CONFLICT (user_id, note_date)
+           DO UPDATE SET content = EXCLUDED.content""",
+        (note_id, uid, note_date, body.content),
+    )
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
+@app.get("/api/notes")
+def list_notes(request: Request):
+    """Get all dates that have notes (for calendar dots)."""
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT note_date FROM day_notes WHERE user_id = %s AND content != ''", (uid,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [r["note_date"] for r in rows]
 
 if __name__ == "__main__":
     import uvicorn
