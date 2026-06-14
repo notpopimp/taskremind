@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 # ---------- Request Models (JSON body, no python-multipart needed) ----------
 class LoginRequest(BaseModel):
@@ -101,7 +102,12 @@ static_dir = BASE_DIR / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+jinja_env = Environment(
+    loader=FileSystemLoader(str(BASE_DIR / "templates")),
+    autoescape=select_autoescape(["html", "xml"]),
+    cache_size=0,
+)
+templates = Jinja2Templates(env=jinja_env)
 # ---------- Helpers ----------
 def now_iso():
     return datetime.utcnow().isoformat()
