@@ -91,8 +91,6 @@ def init_db():
     cur.close()
     conn.close()
 
-init_db()
-
 # ---------- App Setup ----------
 app = FastAPI(title="Task Reminder App")
 
@@ -117,6 +115,22 @@ class NoCacheTemplates:
         return HTMLResponse(html)
 
 templates = NoCacheTemplates(jinja_env)
+
+db_ready = False
+
+@app.on_event("startup")
+def startup():
+    global db_ready
+    try:
+        init_db()
+        db_ready = True
+        print("Database OK")
+    except Exception as e:
+        print(f"Database not available: {e}")
+
+@app.get("/_health")
+def health():
+    return {"status": "ok", "db": db_ready}
 # ---------- Helpers ----------
 def now_iso():
     return datetime.utcnow().isoformat()
@@ -133,6 +147,15 @@ SESSIONS: dict[str, str] = {}
 # ---------- Auth Routes ----------
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
+    if not db_ready:
+        return HTMLResponse("""
+        <html><body style="font-family:sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh">
+        <div style="text-align:center">
+            <h1>⏰ TaskRemind</h1>
+            <p style="color:#ff6b6b">Database not configured yet.</p>
+            <p>Set <code>DATABASE_URL</code> in Railway Variables → PostgreSQL → Reference, then redeploy.</p>
+        </div></body></html>
+        """, status_code=200)
     token = request.cookies.get("session")
     user_id = SESSIONS.get(token) if token else None
     if not user_id:
