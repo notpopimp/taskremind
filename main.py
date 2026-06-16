@@ -108,6 +108,18 @@ def init_db():
         """)
         if cur.fetchone()["count"] == 0:
             cur.execute(f"ALTER TABLE tasks ADD COLUMN {col} {dtype}")
+    # Push subscriptions table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS push_subs (
+            id SERIAL PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            endpoint TEXT NOT NULL,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(user_id, endpoint)
+        )
+    """)
     # Add user columns if upgrading
     for col, dtype in [("role", "TEXT DEFAULT 'user'"),
                        ("phone", "TEXT DEFAULT ''"), ("email", "TEXT DEFAULT ''")]:
@@ -323,6 +335,23 @@ def whoami(request: Request):
         raise HTTPException(404, "User not found")
     return dict(user)
 
+@app.get("/api/me/promote")
+def promote_to_admin(request: Request):
+    """First-time setup: promote the current user to admin."""
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) as cnt FROM users WHERE role='admin'", ())
+    admin_count = cur.fetchone()["cnt"]
+    if admin_count > 0:
+        cur.close()
+        conn.close()
+        raise HTTPException(400, "An admin already exists")
+    cur.execute("UPDATE users SET role='admin' WHERE id = %s", (uid,))
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
 @app.put("/api/profile")
 def update_profile(request: Request, body: dict):
     uid = get_user(request)
@@ -334,6 +363,29 @@ def update_profile(request: Request, body: dict):
     cur.close()
     conn.close()
     return {"ok": True}
+
+@app.post("/api/push/subscribe")
+def push_subscribe(request: Request, body: dict):
+    uid = get_user(request)
+    endpoint = body.get("endpoint", "")
+    keys = body.get("keys", {})
+    conn = get_db()
+    cur = conn.cursor()
+    now = now_iso()
+    cur.execute(
+        "INSERT INTO push_subs (user_id, endpoint, p256dh, auth, created_at) VALUES (%s,%s,%s,%s,%s) "
+        "ON CONFLICT (user_id, endpoint) DO UPDATE SET p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth",
+        (uid, endpoint, keys.get("p256dh",""), keys.get("auth",""), now),
+    )
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
+@app.get("/api/push/vapid")
+def get_vapid_public_key():
+    """Return VAPID public key from env or a placeholder."""
+    key = os.environ.get("VAPID_PUBLIC_KEY", "")
+    return {"publicKey": key}
 
 # ---------- Task Routes ----------
 @app.get("/api/tasks")
