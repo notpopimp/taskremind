@@ -657,10 +657,23 @@ function renderCalendar() {
     const threeHoursMs = 10800000;
     const dayMap = {};
     tasks.forEach(t => {
-        if (t.completed || !t.due_at) return;
-        const d = t.due_at.slice(0,10);
-        if (!dayMap[d]) dayMap[d] = [];
-        dayMap[d].push(t);
+        if (t.completed) return;
+        if (t.is_reminder && t.start_at && t.end_at) {
+            const start = t.start_at.slice(0,10);
+            const end = t.end_at.slice(0,10);
+            let d = new Date(start);
+            const e = new Date(end);
+            while (d <= e) {
+                const ds = d.toISOString().slice(0,10);
+                if (!dayMap[ds]) dayMap[ds] = [];
+                dayMap[ds].push(t);
+                d.setDate(d.getDate()+1);
+            }
+        } else if (t.due_at) {
+            const d = t.due_at.slice(0,10);
+            if (!dayMap[d]) dayMap[d] = [];
+            dayMap[d].push(t);
+        }
     });
     let html = '<div class="cal-day-header">Sun</div><div class="cal-day-header">Mon</div><div class="cal-day-header">Tue</div><div class="cal-day-header">Wed</div><div class="cal-day-header">Thu</div><div class="cal-day-header">Fri</div><div class="cal-day-header">Sat</div>';
     const prevMd = new Date(calYear, calMonth, 0).getDate();

@@ -102,7 +102,6 @@ def init_db():
                        ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''"),
                        ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL"),
                        ("start_at", "TEXT DEFAULT NULL"),
-                       ("role", "TEXT DEFAULT 'user'"),
                        ("phone", "TEXT DEFAULT ''"), ("email", "TEXT DEFAULT ''")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
@@ -110,6 +109,20 @@ def init_db():
         """)
         if cur.fetchone()["count"] == 0:
             cur.execute(f"ALTER TABLE tasks ADD COLUMN {col} {dtype}")
+    # Add user columns if upgrading
+    for col, dtype in [("role", "TEXT DEFAULT 'user'"),
+                       ("phone", "TEXT DEFAULT ''"), ("email", "TEXT DEFAULT ''")]:
+        cur.execute(f"""
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_name='users' AND column_name='{col}'
+        """)
+        if cur.fetchone()["count"] == 0:
+            cur.execute(f"ALTER TABLE users ADD COLUMN {col} {dtype}")
+    # Set first user as admin if no admin exists
+    cur.execute("SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'")
+    admin_count = cur.fetchone()["cnt"]
+    if admin_count == 0:
+        cur.execute("UPDATE users SET role = 'admin' WHERE id = (SELECT id FROM users ORDER BY created_at ASC LIMIT 1)")
     # Notes table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS notes (
