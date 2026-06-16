@@ -40,8 +40,12 @@ class TaskToggle(BaseModel):
     completed_by: str | None = None
 
 class TaskUpdate(BaseModel):
-    description: str | None = None
     title: str | None = None
+    description: str | None = None
+    due_at: str | None = None
+    recurrence: str | None = None
+    priority: str | None = None
+    category: str | None = None
 
 class NotePut(BaseModel):
     content: str = ""
@@ -371,10 +375,18 @@ def update_task(request: Request, task_id: str, body: TaskUpdate):
         cur.close()
         conn.close()
         raise HTTPException(404, "Task not found")
-    if body.description is not None:
-        cur.execute("UPDATE tasks SET description = %s WHERE id = %s", (body.description, task_id))
     if body.title is not None:
         cur.execute("UPDATE tasks SET title = %s WHERE id = %s", (body.title, task_id))
+    if body.description is not None:
+        cur.execute("UPDATE tasks SET description = %s WHERE id = %s", (body.description, task_id))
+    if body.due_at is not None:
+        cur.execute("UPDATE tasks SET due_at = %s WHERE id = %s", (body.due_at or None, task_id))
+    if body.recurrence is not None:
+        cur.execute("UPDATE tasks SET recurrence = %s WHERE id = %s", (body.recurrence, task_id))
+    if body.priority is not None:
+        cur.execute("UPDATE tasks SET priority = %s WHERE id = %s", (body.priority, task_id))
+    if body.category is not None:
+        cur.execute("UPDATE tasks SET category = %s WHERE id = %s", (body.category, task_id))
     cur.close()
     conn.close()
     return {"ok": True}

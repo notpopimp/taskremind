@@ -349,12 +349,12 @@
         </select>
         <select id="newTaskCategory">
             <option value="">No category</option>
-            <option value="personal">Personal</option>
-            <option value="work">Work</option>
-            <option value="chores">Chores</option>
-            <option value="health">Health</option>
-            <option value="finance">Finance</option>
-            <option value="other">Other</option>
+            <option value="personal">Ben</option>
+            <option value="work">Assistant Manager</option>
+            <option value="chores">Rachel</option>
+            <option value="health">Sam</option>
+            <option value="finance">Scheduled Time Off</option>
+            <option value="other">Call Offs</option>
         </select>
         <input type="datetime-local" id="newTaskDue">
         <select id="newTaskRecur">
@@ -435,16 +435,64 @@
     </div>
 </div>
 
-<!-- Notes Modal -->
-<div class="modal-overlay" id="notesModal">
-    <div class="modal-box" style="max-width:400px;text-align:left">
-        <h3 style="margin-bottom:8px">Edit Notes</h3>
-        <div id="notesModalTitle" style="font-size:14px;color:#4165e1;font-weight:500;margin-bottom:10px"></div>
-        <textarea id="notesModalInput" maxlength="500"
-            style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:10px;font-size:14px;outline:none;resize:vertical;min-height:80px;font-family:inherit;box-sizing:border-box"></textarea>
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+    <div class="modal-box" style="max-width:420px;text-align:left;max-height:90vh;overflow-y:auto">
+        <h3 style="margin-bottom:12px">Edit Task</h3>
+        <div style="margin-bottom:10px">
+            <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Title</label>
+            <input type="text" id="editTitle" maxlength="100"
+                style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box">
+        </div>
+        <div style="margin-bottom:10px">
+            <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Description / Notes</label>
+            <textarea id="editDesc" maxlength="500"
+                style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:10px;font-size:14px;outline:none;resize:vertical;min-height:60px;font-family:inherit;box-sizing:border-box"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:100px">
+                <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Priority</label>
+                <select id="editPriority" style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px">
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+            <div style="flex:1;min-width:100px">
+                <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Category</label>
+                <select id="editCategory" style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px">
+                    <option value="">No category</option>
+                    <option value="personal">Ben</option>
+                    <option value="work">Assistant Manager</option>
+                    <option value="chores">Rachel</option>
+                    <option value="health">Sam</option>
+                    <option value="finance">Scheduled Time Off</option>
+                    <option value="other">Call Offs</option>
+                </select>
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <div style="flex:2;min-width:150px">
+                <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Due Date</label>
+                <input type="datetime-local" id="editDue"
+                    style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;box-sizing:border-box">
+            </div>
+            <div style="flex:1;min-width:100px">
+                <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Repeat</label>
+                <select id="editRecur" style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px">
+                    <option value="none">No repeat</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly">Biweekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="yearly">Yearly</option>
+                </select>
+            </div>
+        </div>
         <div class="modal-actions" style="margin-top:12px">
-            <button class="modal-cancel" onclick="closeNotesModal()">Cancel</button>
-            <button class="modal-confirm" onclick="saveNotes()">Save</button>
+            <button class="modal-cancel" onclick="closeEditModal()">Cancel</button>
+            <button class="modal-confirm" onclick="saveEditTask()">Save Changes</button>
         </div>
     </div>
 </div>
@@ -495,7 +543,7 @@ function renderTasks() {
     }
     const now = new Date().toISOString();
     const labels = { none:'', daily:'Daily', weekly:'Weekly', biweekly:'Biweekly', monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly' };
-    const cats = { personal:'Personal', work:'Work', chores:'Chores', health:'Health', finance:'Finance', other:'Other' };
+    const cats = { personal:'Ben', work:'Assistant Manager', chores:'Rachel', health:'Sam', finance:'Scheduled Time Off', other:'Call Offs' };
 
     list.innerHTML = filtered.map(t => {
         const isOverdue = !t.completed && t.due_at && t.due_at < now;
@@ -522,7 +570,7 @@ function renderTasks() {
             '</div>'+
             '<div class="task-actions">'+
                 (t.due_at&&!t.completed ? '<button onclick="extendTask(\''+t.id+'\')">+1h</button>' : '')+
-                '<button onclick="editNotes(\''+t.id+'\')">Notes</button>'+
+                '<button onclick="editTask(\''+t.id+'\')">Edit</button>'+
                 '<button class="delete" onclick="deleteTask(\''+t.id+'\')">X</button>'+
             '</div>'+
         '</div>';
@@ -753,26 +801,42 @@ function doExport(fmt) {
 
 let editTaskId = null;
 
-function editNotes(id) {
+function editTask(id) {
     editTaskId = id;
     const task = tasks.find(t => t.id === id);
     if (!task) return;
-    document.getElementById('notesModalTitle').textContent = esc(task.title);
-    document.getElementById('notesModalInput').value = task.description || '';
-    document.getElementById('notesModal').classList.add('show');
+    document.getElementById('editTitle').value = task.title || '';
+    document.getElementById('editDesc').value = task.description || '';
+    document.getElementById('editPriority').value = task.priority || 'medium';
+    document.getElementById('editCategory').value = task.category || '';
+    document.getElementById('editRecur').value = task.recurrence || 'none';
+    if (task.due_at) {
+        try { document.getElementById('editDue').value = new Date(task.due_at.endsWith('Z')?task.due_at:task.due_at+'Z').toISOString().slice(0,16); }
+        catch(e) { document.getElementById('editDue').value = ''; }
+    } else {
+        document.getElementById('editDue').value = '';
+    }
+    document.getElementById('editModal').classList.add('show');
 }
 
-function closeNotesModal() {
-    document.getElementById('notesModal').classList.remove('show');
+function closeEditModal() {
+    document.getElementById('editModal').classList.remove('show');
     editTaskId = null;
 }
 
-async function saveNotes() {
+async function saveEditTask() {
     if (!editTaskId) return;
-    const desc = document.getElementById('notesModalInput').value.trim();
-    await api('PUT', '/api/tasks/' + editTaskId, { description: desc });
-    closeNotesModal();
-    showToast('Notes saved');
+    const title = document.getElementById('editTitle').value.trim();
+    const description = document.getElementById('editDesc').value.trim();
+    const priority = document.getElementById('editPriority').value;
+    const category = document.getElementById('editCategory').value;
+    const recurrence = document.getElementById('editRecur').value;
+    const dueInput = document.getElementById('editDue').value;
+    let due_at = null;
+    if (dueInput) { due_at = new Date(dueInput).toISOString(); }
+    await api('PUT', '/api/tasks/' + editTaskId, { title, description, due_at, recurrence, priority, category });
+    closeEditModal();
+    showToast('Task updated');
     await loadTasks();
 }
 
