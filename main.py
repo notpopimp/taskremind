@@ -387,7 +387,13 @@ def get_vapid_public_key():
     key = os.environ.get("VAPID_PUBLIC_KEY", "")
     return {"publicKey": VAPID_PUBLIC_KEY}
 
-CRON_SECRET = os.environ.get("CRON_SECRET", "")
+# CRON_SECRET for push notification scheduler
+CRON_SECRET_VAL = os.environ.get("CRON_SECRET")
+if CRON_SECRET_VAL:
+    CRON_SECRET = CRON_SECRET_VAL
+else:
+    CRON_SECRET = "taskremind-cron-secret-2026"
+    print("CRON_SECRET not set in env, using hardcoded default")
 
 # ---------- VAPID Keys (auto-generate if missing) ----------
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
