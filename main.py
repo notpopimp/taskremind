@@ -101,7 +101,9 @@ def init_db():
     for col, dtype in [("completed_by", "TEXT DEFAULT ''"), ("recurrence", "TEXT DEFAULT 'none'"),
                        ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''"),
                        ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL"),
-                       ("start_at", "TEXT DEFAULT NULL"), ("role", "TEXT DEFAULT 'user'")]:
+                       ("start_at", "TEXT DEFAULT NULL"),
+                       ("role", "TEXT DEFAULT 'user'"),
+                       ("phone", "TEXT DEFAULT ''"), ("email", "TEXT DEFAULT ''")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='tasks' AND column_name='{col}'
@@ -298,13 +300,25 @@ def whoami(request: Request):
     uid = get_user(request)
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, username, role FROM users WHERE id = %s", (uid,))
+    cur.execute("SELECT id, username, role, phone, email FROM users WHERE id = %s", (uid,))
     user = cur.fetchone()
     cur.close()
     conn.close()
     if not user:
         raise HTTPException(404, "User not found")
     return dict(user)
+
+@app.put("/api/profile")
+def update_profile(request: Request, body: dict):
+    uid = get_user(request)
+    phone = body.get("phone", "")
+    email = body.get("email", "")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET phone = %s, email = %s WHERE id = %s", (phone, email, uid))
+    cur.close()
+    conn.close()
+    return {"ok": True}
 
 # ---------- Task Routes ----------
 @app.get("/api/tasks")
