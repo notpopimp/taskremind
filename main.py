@@ -80,7 +80,8 @@ def init_db():
             id TEXT PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             pin_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            role TEXT DEFAULT 'user'
         )
     """)
     cur.execute("""
@@ -100,7 +101,7 @@ def init_db():
     for col, dtype in [("completed_by", "TEXT DEFAULT ''"), ("recurrence", "TEXT DEFAULT 'none'"),
                        ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''"),
                        ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL"),
-                       ("start_at", "TEXT DEFAULT NULL")]:
+                       ("start_at", "TEXT DEFAULT NULL"), ("role", "TEXT DEFAULT 'user'")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='tasks' AND column_name='{col}'
@@ -187,6 +188,19 @@ def get_user(request: Request) -> str:
         raise HTTPException(401, "Not logged in")
     return uid
 
+def get_user_role(uid: str) -> str:
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT role FROM users WHERE id = %s", (uid,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row["role"] if row else "user"
+
+def require_admin(uid: str):
+    if get_user_role(uid) != "admin":
+        raise HTTPException(403, "Only admin can perform this action")
+
 # Recurrence patterns
 def next_recurrence(due_at: str, pattern: str) -> str | None:
     if pattern == "none" or not due_at:
@@ -258,9 +272,12 @@ def register(body: RegisterRequest):
         conn.close()
         raise HTTPException(409, "Username already taken")
     user_id = uuid.uuid4().hex[:12]
+    cur.execute("SELECT COUNT(*) AS cnt FROM users")
+    count = cur.fetchone()["cnt"]
+    role = "admin" if count == 0 else "user"
     cur.execute(
-        "INSERT INTO users (id, username, pin_hash, created_at) VALUES (%s, %s, %s, %s)",
-        (user_id, body.username, hash_pin(body.pin), now_iso()),
+        "INSERT INTO users (id, username, pin_hash, created_at, role) VALUES (%s, %s, %s, %s, %s)",
+        (user_id, body.username, hash_pin(body.pin), now_iso(), role),
     )
     cur.close()
     conn.close()
@@ -275,6 +292,19 @@ def logout():
     resp = JSONResponse({"ok": True})
     resp.delete_cookie("session")
     return resp
+
+@app.get("/api/me")
+def whoami(request: Request):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, username, role FROM users WHERE id = %s", (uid,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not user:
+        raise HTTPException(404, "User not found")
+    return dict(user)
 
 # ---------- Task Routes ----------
 @app.get("/api/tasks")
@@ -342,6 +372,7 @@ def toggle_task(request: Request, task_id: str, body: TaskToggle = None):
 @app.delete("/api/tasks/{task_id}")
 def delete_task(request: Request, task_id: str):
     uid = get_user(request)
+    require_admin(uid)
     conn = get_db()
     cur = conn.cursor()
     cur.execute("DELETE FROM tasks WHERE id = %s AND user_id = %s", (task_id, uid))
@@ -375,6 +406,7 @@ def extend_task(request: Request, task_id: str, body: ExtendRequest = None):
 @app.put("/api/tasks/{task_id}")
 def update_task(request: Request, task_id: str, body: TaskUpdate):
     uid = get_user(request)
+    require_admin(uid)
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM tasks WHERE id = %s AND user_id = %s", (task_id, uid))

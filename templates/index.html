@@ -532,6 +532,7 @@ let currentView = 'list';
 let calYear = 0, calMonth = 0;
 let pendingCompleteId = null;
 let notesWithContent = new Set();
+let currentUser = null;
 let currentType = 'task';
 
 async function api(method, url, body) {
@@ -567,6 +568,7 @@ function setType(type) {
 async function loadTasks() {
     tasks = await api('GET', '/api/tasks');
     notesWithContent = new Set(await api('GET', '/api/notes'));
+    try { currentUser = await api('GET', '/api/me'); } catch(e) {}
     renderTasks();
     if (currentView==='calendar') renderCalendar();
     checkReminders();
@@ -619,9 +621,7 @@ function renderTasks() {
             '</div>'+
             '<div class="task-actions">'+
                 (t.due_at&&!t.completed ? '<button onclick="extendTask(\''+t.id+'\')">+1h</button>' : '')+
-                '<button onclick="openEditTask(\''+t.id+'\')">Edit</button>'+
-                '<button onclick="openNotesEdit(\''+t.id+'\')">Notes</button>'+
-                '<button class="delete" onclick="deleteTask(\''+t.id+'\')">X</button>'+
+                (currentUser&&currentUser.role==='admin' ? '<button onclick="openEditTask(\''+t.id+'\')">Edit</button><button class="delete" onclick="deleteTask(\''+t.id+'\')">X</button>' : '')+
             '</div>'+
         '</div>';
     }).join('');
