@@ -385,7 +385,148 @@ def push_subscribe(request: Request, body: dict):
 def get_vapid_public_key():
     """Return VAPID public key from env or a placeholder."""
     key = os.environ.get("VAPID_PUBLIC_KEY", "")
-    return {"publicKey": key}
+    return {"publicKey": VAPID_PUBLIC_KEY}
+
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
+
+# ---------- VAPID Keys (auto-generate if missing) ----------
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+
+if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+    try:
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives import serialization
+        import base64
+        key = ec.generate_private_key(ec.SECP256R1())
+        priv_raw = key.private_bytes(
+            serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
+        )
+        pub_raw = key.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        )
+        VAPID_PRIVATE_KEY = base64.urlsafe_b64encode(priv_raw).rstrip(b"=").decode()
+        VAPID_PUBLIC_KEY = base64.urlsafe_b64encode(pub_raw).rstrip(b"=").decode()
+        print(f"Auto-generated VAPID keys. Set VAPID_PUBLIC_KEY={VAPID_PUBLIC_KEY} in Railway env for persistence.")
+    except Exception as e:
+        print(f"Could not generate VAPID keys: {e}")
+
+@app.post("/api/cron/check-reminders")
+def cron_check_reminders(request: Request):
+    """Called by Railway cron: sends push notifications for due reminders."""
+    body_data = request.json() if request.headers.get("content-type","") == "application/json" else {}
+    auth = body_data.get("secret", "") or request.query_params.get("secret", "")
+    if not CRON_SECRET or auth != CRON_SECRET:
+        raise HTTPException(401, "Invalid cron secret")
+
+    vapid_private = VAPID_PRIVATE_KEY
+    vapid_public = VAPID_PUBLIC_KEY
+    if not vapid_private or not vapid_public:
+        return {"sent": 0, "error": "VAPID keys not configured"}
+
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+    tomorrow_start = today_end
+    tomorrow_end = tomorrow_start + timedelta(days=1)
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Get all users with push subscriptions
+    cur.execute("SELECT DISTINCT user_id FROM push_subs")
+    user_ids = [r["user_id"] for r in cur.fetchall()]
+
+    total_sent = 0
+    for uid in user_ids:
+        # Check for reminders due today
+        cur.execute(
+            """SELECT id, title, due_at, start_at, end_at FROM tasks
+               WHERE user_id = %s AND is_reminder = 1 AND completed = 0
+               AND ((due_at IS NOT NULL AND due_at >= %s AND due_at < %s)
+                    OR (start_at IS NOT NULL AND start_at <= %s AND end_at >= %s))
+               ORDER BY due_at ASC""",
+            (uid, today_start.isoformat(), today_end.isoformat(),
+             today_end.isoformat(), today_start.isoformat()),
+        )
+        reminders = cur.fetchall()
+
+        # Also check for overdue tasks
+        cur.execute(
+            """SELECT id, title, due_at FROM tasks
+               WHERE user_id = %s AND completed = 0 AND due_at IS NOT NULL
+               AND due_at < %s AND due_at >= %s
+               ORDER BY due_at ASC""",
+            (uid, today_start.isoformat(), (today_start - timedelta(days=1)).isoformat()),
+        )
+        overdue = cur.fetchall()
+
+        if not reminders and not overdue:
+            continue
+
+        # Build notification payload
+        lines = []
+        for r in reminders:
+            dt = r.get("due_at") or r.get("start_at") or ""
+            if dt:
+                try:
+                    d = datetime.fromisoformat(dt)
+                    dt_str = d.strftime("%I:%M %p").lstrip("0")
+                except:
+                    dt_str = dt[:5]
+            else:
+                dt_str = ""
+            title = r["title"][:50]
+            lines.append(f"{dt_str} - {title}")
+
+        for r in overdue[:3]:
+            lines.append(f"OVERDUE: {r['title'][:50]}")
+
+        if not lines:
+            continue
+
+        payload = {
+            "title": "📋 TaskRemind Reminders",
+            "body": "\n".join(lines),
+        }
+
+        # Get subscriptions for this user
+        cur.execute(
+            "SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = %s",
+            (uid,),
+        )
+        subs = cur.fetchall()
+
+        for sub in subs:
+            try:
+                from pywebpush import webpush
+
+                sub_info = {
+                    "endpoint": sub["endpoint"],
+                    "keys": {
+                        "p256dh": sub["p256dh"],
+                        "auth": sub["auth"],
+                    },
+                }
+                webpush(
+                    subscription_info=sub_info,
+                    data=json.dumps(payload),
+                    vapid_private_key=vapid_private,
+                    vapid_claims={"sub": "mailto:cagesliquidators@yahoo.com"},
+                )
+                total_sent += 1
+            except Exception as e:
+                # If subscription expired, remove it
+                if "410" in str(e) or "expired" in str(e).lower():
+                    cur.execute(
+                        "DELETE FROM push_subs WHERE endpoint = %s",
+                        (sub["endpoint"],),
+                    )
+                continue
+
+    cur.close()
+    conn.close()
+    return {"sent": total_sent, "checked_users": len(user_ids)}
 
 # ---------- Task Routes ----------
 @app.get("/api/tasks")
