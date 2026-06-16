@@ -335,43 +335,59 @@
     </div>
     <div class="add-row">
         <input type="text" id="newTaskTitle" placeholder="New task..." maxlength="100">
-        <button onclick="addTask()">+ Add</button>
+        <button onclick="addTask()" id="addBtn">+ Add</button>
+    </div>
+    <div class="type-toggle" style="display:flex;gap:0;margin-bottom:8px;background:#f0f2f5;border-radius:8px;overflow:hidden">
+        <button class="type-btn active" id="typeTaskBtn" onclick="setType('task')" style="flex:1;padding:8px;border:none;background:var(--active,#4165e1);color:white;font-size:13px;cursor:pointer;font-weight:500">Task</button>
+        <button class="type-btn" id="typeReminderBtn" onclick="setType('reminder')" style="flex:1;padding:8px;border:none;background:transparent;color:#667788;font-size:13px;cursor:pointer">Reminder</button>
     </div>
     <div class="add-options">
         <div class="desc-row" style="width:100%">
             <textarea id="newTaskDesc" placeholder="Notes / description..." maxlength="500"
                 style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:10px;background:white;color:#1a1a2e;font-size:14px;outline:none;resize:vertical;min-height:40px;font-family:inherit"></textarea>
         </div>
-        <select id="newTaskPriority">
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="low">Low</option>
-        </select>
-        <select id="newTaskCategory">
-            <option value="">No category</option>
-            <option value="personal">Ben</option>
-            <option value="work">Assistant Manager</option>
-            <option value="chores">Rachel</option>
-            <option value="health">Sam</option>
-            <option value="finance">Scheduled Time Off</option>
-            <option value="other">Call Offs</option>
-        </select>
-        <input type="datetime-local" id="newTaskDue">
-        <select id="newTaskRecur">
-            <option value="none">No repeat</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="biweekly">Biweekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="quarterly">Quarterly</option>
-            <option value="yearly">Yearly</option>
-        </select>
-    </div>
-    <div class="preset-btns">
-        <span class="preset-btn" onclick="setDueToday()">Today</span>
-        <span class="preset-btn" onclick="setDueTomorrow()">Tomorrow</span>
-        <span class="preset-btn" onclick="setDueNextWeek()">Next week</span>
-        <span class="preset-btn" onclick="setDueNextMonth()">Next month</span>
+        <div id="taskFields">
+            <select id="newTaskPriority">
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+            </select>
+            <select id="newTaskCategory">
+                <option value="">No category</option>
+                <option value="personal">Ben</option>
+                <option value="work">Assistant Manager</option>
+                <option value="chores">Rachel</option>
+                <option value="health">Sam</option>
+                <option value="finance">Scheduled Time Off</option>
+                <option value="other">Call Offs</option>
+            </select>
+            <input type="datetime-local" id="newTaskDue">
+            <select id="newTaskRecur">
+                <option value="none">No repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="yearly">Yearly</option>
+            </select>
+        </div>
+        <div id="reminderFields" style="display:none;width:100%">
+            <div style="display:flex;gap:8px;align-items:center">
+                <span style="font-size:13px;color:#667788;white-space:nowrap">Start:</span>
+                <input type="date" id="newReminderStart" style="flex:1;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;outline:none">
+                <span style="font-size:13px;color:#667788;white-space:nowrap">End:</span>
+                <input type="date" id="newReminderEnd" style="flex:1;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;outline:none">
+            </div>
+            <select id="newReminderCategory" style="width:100%;margin-top:8px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;outline:none;background:white;color:#1a1a2e">
+                <option value="personal">Ben</option>
+                <option value="work">Assistant Manager</option>
+                <option value="chores">Rachel</option>
+                <option value="health">Sam</option>
+                <option value="finance">Scheduled Time Off</option>
+                <option value="other">Call Offs</option>
+            </select>
+        </div>
     </div>
 </div>
 

@@ -35,6 +35,8 @@ class TaskCreate(BaseModel):
     recurrence: str = "none"
     priority: str = "medium"
     category: str = ""
+    is_reminder: bool = False
+    end_at: str | None = None
 
 class TaskToggle(BaseModel):
     completed_by: str | None = None
@@ -46,6 +48,8 @@ class TaskUpdate(BaseModel):
     recurrence: str | None = None
     priority: str | None = None
     category: str | None = None
+    is_reminder: bool | None = None
+    end_at: str | None = None
 
 class NotePut(BaseModel):
     content: str = ""
@@ -92,7 +96,8 @@ def init_db():
     """)
     # Add columns if upgrading
     for col, dtype in [("completed_by", "TEXT DEFAULT ''"), ("recurrence", "TEXT DEFAULT 'none'"),
-                       ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''")]:
+                       ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''"),
+                       ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='tasks' AND column_name='{col}'
@@ -290,8 +295,8 @@ def create_task(request: Request, body: TaskCreate):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s) RETURNING *",
-        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now_iso()),
+        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at, is_reminder, end_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s) RETURNING *",
+        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now_iso(), int(body.is_reminder), body.end_at or None),
     )
     task = cur.fetchone()
     cur.close()
@@ -387,6 +392,12 @@ def update_task(request: Request, task_id: str, body: TaskUpdate):
         cur.execute("UPDATE tasks SET priority = %s WHERE id = %s", (body.priority, task_id))
     if body.category is not None:
         cur.execute("UPDATE tasks SET category = %s WHERE id = %s", (body.category, task_id))
+    if body.is_reminder is not None:
+        cur.execute("UPDATE tasks SET is_reminder = %s WHERE id = %s", (int(body.is_reminder), task_id))
+    if body.end_at is not None:
+        cur.execute("UPDATE tasks SET end_at = %s WHERE id = %s", (body.end_at or None, task_id))
+    if body.title is not None and body.title.strip() == '':
+        cur.execute("UPDATE tasks SET title = %s WHERE id = %s", ('', task_id))
     cur.close()
     conn.close()
     return {"ok": True}
@@ -398,7 +409,7 @@ def calendar_tasks(request: Request):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "SELECT * FROM tasks WHERE user_id = %s AND completed = 0 AND due_at IS NOT NULL ORDER BY due_at ASC",
+        "SELECT * FROM tasks WHERE user_id = %s AND (completed = 0 OR is_reminder = 1) AND due_at IS NOT NULL ORDER BY due_at ASC",
         (uid,),
     )
     rows = cur.fetchall()
