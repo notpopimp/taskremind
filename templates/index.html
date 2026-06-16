@@ -717,7 +717,15 @@ async function showDayTasks(dateStr) {
     const input = document.getElementById('dayNoteInput');
     input.value = note.content||'';
     input.dataset.date = dateStr;
-    const dayTasks = tasks.filter(t => !t.completed && t.due_at && t.due_at.slice(0,10)===dateStr);
+    const dayTasks = tasks.filter(t => {
+        if (t.completed) return false;
+        if (!t.due_at) return false;
+        const taskDate = t.due_at.slice(0,10);
+        if (t.is_reminder && t.start_at) {
+            return dateStr >= t.start_at.slice(0,10) && dateStr <= taskDate;
+        }
+        return taskDate === dateStr;
+    });
     const list = document.getElementById('dayDetailList');
     if (dayTasks.length===0) {
         list.innerHTML = '<div style="color:#98a2b3;padding:10px;text-align:center;">No tasks for this day</div>';

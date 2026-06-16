@@ -101,8 +101,7 @@ def init_db():
     for col, dtype in [("completed_by", "TEXT DEFAULT ''"), ("recurrence", "TEXT DEFAULT 'none'"),
                        ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''"),
                        ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL"),
-                       ("start_at", "TEXT DEFAULT NULL"),
-                       ("phone", "TEXT DEFAULT ''"), ("email", "TEXT DEFAULT ''")]:
+                       ("start_at", "TEXT DEFAULT NULL")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='tasks' AND column_name='{col}'
@@ -118,6 +117,9 @@ def init_db():
         """)
         if cur.fetchone()["count"] == 0:
             cur.execute(f"ALTER TABLE users ADD COLUMN {col} {dtype}")
+            if col == "role":
+                # First-time role column: set first registered user as admin
+                cur.execute("UPDATE users SET role = 'admin' WHERE id = (SELECT id FROM users ORDER BY created_at ASC LIMIT 1)")
     # Set first user as admin if no admin exists
     cur.execute("SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'")
     admin_count = cur.fetchone()["cnt"]
