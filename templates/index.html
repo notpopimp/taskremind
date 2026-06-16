@@ -570,7 +570,8 @@ function renderTasks() {
             '</div>'+
             '<div class="task-actions">'+
                 (t.due_at&&!t.completed ? '<button onclick="extendTask(\''+t.id+'\')">+1h</button>' : '')+
-                '<button onclick="editTask(\''+t.id+'\')">Edit</button>'+
+                '<button onclick="openEditTask(\''+t.id+'\')">Edit</button>'+
+                '<button onclick="openNotesEdit(\''+t.id+'\')">Notes</button>'+
                 '<button class="delete" onclick="deleteTask(\''+t.id+'\')">X</button>'+
             '</div>'+
         '</div>';
@@ -801,7 +802,7 @@ function doExport(fmt) {
 
 let editTaskId = null;
 
-function editTask(id) {
+function openEditTask(id) {
     editTaskId = id;
     const task = tasks.find(t => t.id === id);
     if (!task) return;

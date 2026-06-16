@@ -40,8 +40,8 @@ class TaskToggle(BaseModel):
     completed_by: str | None = None
 
 class TaskUpdate(BaseModel):
-    title: str | None = None
     description: str | None = None
+    title: str | None = None
     due_at: str | None = None
     recurrence: str | None = None
     priority: str | None = None
