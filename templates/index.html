@@ -338,6 +338,10 @@
         <button onclick="addTask()">+ Add</button>
     </div>
     <div class="add-options">
+        <div class="desc-row" style="width:100%">
+            <textarea id="newTaskDesc" placeholder="Notes / description..." maxlength="500"
+                style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:10px;background:white;color:#1a1a2e;font-size:14px;outline:none;resize:vertical;min-height:40px;font-family:inherit"></textarea>
+        </div>
         <select id="newTaskPriority">
             <option value="medium">Medium</option>
             <option value="high">High</option>
@@ -431,6 +435,20 @@
     </div>
 </div>
 
+<!-- Notes Modal -->
+<div class="modal-overlay" id="notesModal">
+    <div class="modal-box" style="max-width:400px;text-align:left">
+        <h3 style="margin-bottom:8px">Edit Notes</h3>
+        <div id="notesModalTitle" style="font-size:14px;color:#4165e1;font-weight:500;margin-bottom:10px"></div>
+        <textarea id="notesModalInput" maxlength="500"
+            style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:10px;font-size:14px;outline:none;resize:vertical;min-height:80px;font-family:inherit;box-sizing:border-box"></textarea>
+        <div class="modal-actions" style="margin-top:12px">
+            <button class="modal-cancel" onclick="closeNotesModal()">Cancel</button>
+            <button class="modal-confirm" onclick="saveNotes()">Save</button>
+        </div>
+    </div>
+</div>
+
 <div class="copy-toast" id="toast">Done!</div>
 
 <script>
@@ -504,6 +522,7 @@ function renderTasks() {
             '</div>'+
             '<div class="task-actions">'+
                 (t.due_at&&!t.completed ? '<button onclick="extendTask(\''+t.id+'\')">+1h</button>' : '')+
+                '<button onclick="editNotes(\''+t.id+'\')">Notes</button>'+
                 '<button class="delete" onclick="deleteTask(\''+t.id+'\')">X</button>'+
             '</div>'+
         '</div>';
@@ -614,14 +633,16 @@ async function saveDayNote() {
 async function addTask() {
     const title = document.getElementById('newTaskTitle').value.trim();
     if (!title) return;
+    const description = document.getElementById('newTaskDesc').value.trim();
     const dueInput = document.getElementById('newTaskDue').value;
     const recurrence = document.getElementById('newTaskRecur').value;
     const priority = document.getElementById('newTaskPriority').value || 'medium';
     const category = document.getElementById('newTaskCategory').value || '';
     let due_at = null;
     if (dueInput) { due_at = new Date(dueInput).toISOString(); }
-    await api('POST', '/api/tasks', { title, description:'', due_at, recurrence, priority, category });
+    await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, category });
     document.getElementById('newTaskTitle').value='';
+    document.getElementById('newTaskDesc').value='';
     document.getElementById('newTaskDue').value='';
     document.getElementById('newTaskRecur').value='none';
     await loadTasks();
@@ -728,6 +749,31 @@ function toggleExport() {
 function doExport(fmt) {
     window.open('/api/export/'+fmt, '_blank');
     document.getElementById('exportDropdown').classList.remove('show');
+}
+
+let editTaskId = null;
+
+function editNotes(id) {
+    editTaskId = id;
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    document.getElementById('notesModalTitle').textContent = esc(task.title);
+    document.getElementById('notesModalInput').value = task.description || '';
+    document.getElementById('notesModal').classList.add('show');
+}
+
+function closeNotesModal() {
+    document.getElementById('notesModal').classList.remove('show');
+    editTaskId = null;
+}
+
+async function saveNotes() {
+    if (!editTaskId) return;
+    const desc = document.getElementById('notesModalInput').value.trim();
+    await api('PUT', '/api/tasks/' + editTaskId, { description: desc });
+    closeNotesModal();
+    showToast('Notes saved');
+    await loadTasks();
 }
 
 function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }

@@ -39,6 +39,10 @@ class TaskCreate(BaseModel):
 class TaskToggle(BaseModel):
     completed_by: str | None = None
 
+class TaskUpdate(BaseModel):
+    description: str | None = None
+    title: str | None = None
+
 class NotePut(BaseModel):
     content: str = ""
 
@@ -355,6 +359,25 @@ def extend_task(request: Request, task_id: str, body: ExtendRequest = None):
     cur.close()
     conn.close()
     return {"ok": True, "due_at": new_due}
+
+@app.put("/api/tasks/{task_id}")
+def update_task(request: Request, task_id: str, body: TaskUpdate):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM tasks WHERE id = %s AND user_id = %s", (task_id, uid))
+    task = cur.fetchone()
+    if not task:
+        cur.close()
+        conn.close()
+        raise HTTPException(404, "Task not found")
+    if body.description is not None:
+        cur.execute("UPDATE tasks SET description = %s WHERE id = %s", (body.description, task_id))
+    if body.title is not None:
+        cur.execute("UPDATE tasks SET title = %s WHERE id = %s", (body.title, task_id))
+    cur.close()
+    conn.close()
+    return {"ok": True}
 
 # ---------- Calendar Route ----------
 @app.get("/api/tasks/calendar")
