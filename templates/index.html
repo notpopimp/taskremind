@@ -488,12 +488,22 @@
             </div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-            <div style="flex:2;min-width:150px">
+            <div style="flex:2;min-width:150px" id="editDueGroup">
                 <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Due Date</label>
                 <input type="datetime-local" id="editDue"
                     style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;box-sizing:border-box">
             </div>
-            <div style="flex:1;min-width:100px">
+            <div style="flex:2;min-width:150px" id="editStartGroup" class="reminder-field">
+                <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Start Date</label>
+                <input type="date" id="editStart"
+                    style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;box-sizing:border-box">
+            </div>
+            <div style="flex:2;min-width:150px" id="editEndGroup" class="reminder-field">
+                <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">End Date</label>
+                <input type="date" id="editEnd"
+                    style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;box-sizing:border-box">
+            </div>
+            <div style="flex:1;min-width:100px" id="editRecurGroup">
                 <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Repeat</label>
                 <select id="editRecur" style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px">
                     <option value="none">No repeat</option>
@@ -822,17 +832,39 @@ function openEditTask(id) {
     editTaskId = id;
     const task = tasks.find(t => t.id === id);
     if (!task) return;
+    const isReminder = task.is_reminder;
     document.getElementById('editTitle').value = task.title || '';
     document.getElementById('editDesc').value = task.description || '';
-    document.getElementById('editPriority').value = task.priority || 'medium';
-    document.getElementById('editCategory').value = task.category || '';
-    document.getElementById('editRecur').value = task.recurrence || 'none';
-    if (task.due_at) {
-        try { document.getElementById('editDue').value = new Date(task.due_at.endsWith('Z')?task.due_at:task.due_at+'Z').toISOString().slice(0,16); }
-        catch(e) { document.getElementById('editDue').value = ''; }
+    // Show/hide task vs reminder fields
+    document.getElementById('editPriority').style.display = isReminder ? 'none' : '';
+    document.getElementById('editPriority').closest('div').style.display = isReminder ? 'none' : '';
+    document.getElementById('editDueGroup').style.display = isReminder ? 'none' : '';
+    document.getElementById('editRecurGroup').style.display = isReminder ? 'none' : '';
+    document.querySelectorAll('.reminder-field').forEach(el => el.style.display = isReminder ? '' : 'none');
+    if (!isReminder) {
+        document.getElementById('editPriority').value = task.priority || 'medium';
+        if (task.due_at) {
+            try { document.getElementById('editDue').value = new Date(task.due_at.endsWith('Z')?task.due_at:task.due_at+'Z').toISOString().slice(0,16); }
+            catch(e) { document.getElementById('editDue').value = ''; }
+        } else {
+            document.getElementById('editDue').value = '';
+        }
+        document.getElementById('editRecur').value = task.recurrence || 'none';
     } else {
-        document.getElementById('editDue').value = '';
+        if (task.start_at) {
+            try { document.getElementById('editStart').value = task.start_at.slice(0,10); }
+            catch(e) { document.getElementById('editStart').value = ''; }
+        } else {
+            document.getElementById('editStart').value = '';
+        }
+        if (task.due_at) {
+            try { document.getElementById('editEnd').value = task.due_at.slice(0,10); }
+            catch(e) { document.getElementById('editEnd').value = ''; }
+        } else {
+            document.getElementById('editEnd').value = '';
+        }
     }
+    document.getElementById('editCategory').value = task.category || '';
     document.getElementById('editModal').classList.add('show');
 }
 
@@ -843,15 +875,29 @@ function closeEditModal() {
 
 async function saveEditTask() {
     if (!editTaskId) return;
+    const task = tasks.find(t => t.id === editTaskId);
+    if (!task) return;
+    const isReminder = task.is_reminder;
     const title = document.getElementById('editTitle').value.trim();
     const description = document.getElementById('editDesc').value.trim();
-    const priority = document.getElementById('editPriority').value;
     const category = document.getElementById('editCategory').value;
-    const recurrence = document.getElementById('editRecur').value;
-    const dueInput = document.getElementById('editDue').value;
-    let due_at = null;
-    if (dueInput) { due_at = new Date(dueInput).toISOString(); }
-    await api('PUT', '/api/tasks/' + editTaskId, { title, description, due_at, recurrence, priority, category });
+    let updateData = { title, description, category };
+    if (isReminder) {
+        const startVal = document.getElementById('editStart').value;
+        const endVal = document.getElementById('editEnd').value;
+        updateData.start_at = startVal || null;
+        updateData.due_at = endVal || null;
+    } else {
+        const priority = document.getElementById('editPriority').value;
+        const recurrence = document.getElementById('editRecur').value;
+        const dueInput = document.getElementById('editDue').value;
+        let due_at = null;
+        if (dueInput) { due_at = new Date(dueInput).toISOString(); }
+        updateData.priority = priority;
+        updateData.recurrence = recurrence;
+        updateData.due_at = due_at;
+    }
+    await api('PUT', '/api/tasks/' + editTaskId, updateData);
     closeEditModal();
     showToast('Task updated');
     await loadTasks();

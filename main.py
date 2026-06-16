@@ -48,6 +48,7 @@ class TaskUpdate(BaseModel):
     recurrence: str | None = None
     priority: str | None = None
     category: str | None = None
+    start_at: str | None = None
     is_reminder: bool | None = None
     end_at: str | None = None
 
@@ -392,6 +393,8 @@ def update_task(request: Request, task_id: str, body: TaskUpdate):
         cur.execute("UPDATE tasks SET priority = %s WHERE id = %s", (body.priority, task_id))
     if body.category is not None:
         cur.execute("UPDATE tasks SET category = %s WHERE id = %s", (body.category, task_id))
+    if body.start_at is not None:
+        cur.execute("UPDATE tasks SET start_at = %s WHERE id = %s", (body.start_at or None, task_id))
     if body.is_reminder is not None:
         cur.execute("UPDATE tasks SET is_reminder = %s WHERE id = %s", (int(body.is_reminder), task_id))
     if body.end_at is not None:
