@@ -532,6 +532,7 @@ let currentView = 'list';
 let calYear = 0, calMonth = 0;
 let pendingCompleteId = null;
 let notesWithContent = new Set();
+let currentType = 'task';
 
 async function api(method, url, body) {
     const opts = { method, headers: {} };
@@ -539,6 +540,28 @@ async function api(method, url, body) {
     const res = await fetch(url, opts);
     if (!res.ok) { if (res.status===401) { window.location.href='/'; return; } throw new Error(await res.text()); }
     return res.json();
+}
+
+function setType(type) {
+    currentType = type;
+    const taskBtn = document.getElementById('typeTaskBtn');
+    const remBtn = document.getElementById('typeReminderBtn');
+    const taskFields = document.getElementById('taskFields');
+    const remFields = document.getElementById('reminderFields');
+    const addBtn = document.getElementById('addBtn');
+    if (type === 'reminder') {
+        taskBtn.style.background = 'transparent'; taskBtn.style.color = '#667788';
+        remBtn.style.background = '#4165e1'; remBtn.style.color = 'white';
+        taskFields.style.display = 'none';
+        remFields.style.display = 'block';
+        addBtn.textContent = '+ Add Reminder';
+    } else {
+        taskBtn.style.background = '#4165e1'; taskBtn.style.color = 'white';
+        remBtn.style.background = 'transparent'; remBtn.style.color = '#667788';
+        taskFields.style.display = '';
+        remFields.style.display = 'none';
+        addBtn.textContent = '+ Add';
+    }
 }
 
 async function loadTasks() {
