@@ -704,18 +704,48 @@ async function saveDayNote() {
     renderCalendar();
 }
 
+/* Type toggle */
+let currentType = 'task';
+
+function setType(type) {
+    currentType = type;
+    document.getElementById('typeTaskBtn').classList.toggle('active', type==='task');
+    document.getElementById('typeTaskBtn').style.background = type==='task' ? '#4165e1' : 'transparent';
+    document.getElementById('typeTaskBtn').style.color = type==='task' ? 'white' : '#667788';
+    document.getElementById('typeReminderBtn').classList.toggle('active', type==='reminder');
+    document.getElementById('typeReminderBtn').style.background = type==='reminder' ? '#4165e1' : 'transparent';
+    document.getElementById('typeReminderBtn').style.color = type==='reminder' ? 'white' : '#667788';
+    document.getElementById('taskFields').style.display = type==='task' ? '' : 'none';
+    document.getElementById('reminderFields').style.display = type==='reminder' ? '' : 'none';
+    document.getElementById('addBtn').textContent = type==='reminder' ? '+ Add Reminder' : '+ Add';
+}
+
 /* Task actions */
 async function addTask() {
     const title = document.getElementById('newTaskTitle').value.trim();
     if (!title) return;
     const description = document.getElementById('newTaskDesc').value.trim();
-    const dueInput = document.getElementById('newTaskDue').value;
-    const recurrence = document.getElementById('newTaskRecur').value;
-    const priority = document.getElementById('newTaskPriority').value || 'medium';
-    const category = document.getElementById('newTaskCategory').value || '';
-    let due_at = null;
-    if (dueInput) { due_at = new Date(dueInput).toISOString(); }
-    await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, category });
+    if (currentType === 'reminder') {
+        const startVal = document.getElementById('newReminderStart').value;
+        const endVal = document.getElementById('newReminderEnd').value;
+        const category = document.getElementById('newReminderCategory').value || '';
+        if (!startVal) { showToast('Please pick a start date'); return; }
+        await api('POST', '/api/tasks', {
+            title, description, category,
+            start_at: startVal,
+            due_at: endVal || startVal,
+            end_at: endVal || null,
+            is_reminder: true
+        });
+    } else {
+        const dueInput = document.getElementById('newTaskDue').value;
+        const recurrence = document.getElementById('newTaskRecur').value;
+        const priority = document.getElementById('newTaskPriority').value || 'medium';
+        const category = document.getElementById('newTaskCategory').value || '';
+        let due_at = null;
+        if (dueInput) { due_at = new Date(dueInput).toISOString(); }
+        await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, category });
+    }
     document.getElementById('newTaskTitle').value='';
     document.getElementById('newTaskDesc').value='';
     document.getElementById('newTaskDue').value='';
@@ -887,6 +917,7 @@ async function saveEditTask() {
         const endVal = document.getElementById('editEnd').value;
         updateData.start_at = startVal || null;
         updateData.due_at = endVal || null;
+        updateData.end_at = endVal || null;
     } else {
         const priority = document.getElementById('editPriority').value;
         const recurrence = document.getElementById('editRecur').value;

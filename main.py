@@ -35,6 +35,7 @@ class TaskCreate(BaseModel):
     recurrence: str = "none"
     priority: str = "medium"
     category: str = ""
+    start_at: str | None = None
     is_reminder: bool = False
     end_at: str | None = None
 
@@ -98,7 +99,8 @@ def init_db():
     # Add columns if upgrading
     for col, dtype in [("completed_by", "TEXT DEFAULT ''"), ("recurrence", "TEXT DEFAULT 'none'"),
                        ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''"),
-                       ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL")]:
+                       ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL"),
+                       ("start_at", "TEXT DEFAULT NULL")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='tasks' AND column_name='{col}'
@@ -296,8 +298,8 @@ def create_task(request: Request, body: TaskCreate):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at, is_reminder, end_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s) RETURNING *",
-        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now_iso(), int(body.is_reminder), body.end_at or None),
+        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at, is_reminder, end_at, start_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now_iso(), int(body.is_reminder), body.end_at or None, body.start_at or None),
     )
     task = cur.fetchone()
     cur.close()
