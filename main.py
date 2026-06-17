@@ -497,36 +497,31 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
         print(f"Could not generate VAPID keys: {e}")
 
 # ---------- Email / SMS Notifications ----------
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
-SMTP_EMAIL = os.environ.get("SMTP_EMAIL", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", "waypoint.notifications@gmail.com")
 
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
 TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER", "")
 
 def send_email(to_email: str, subject: str, body: str) -> tuple:
-    """Send email via SMTP. Returns (True, '') on success or (False, error_msg)."""
-    if not SMTP_EMAIL or not SMTP_PASSWORD or not to_email:
-        return (False, "Missing SMTP config or recipient email")
+    """Send email via SendGrid HTTP API. Returns (True, '') on success or (False, error_msg)."""
+    if not SENDGRID_API_KEY or not to_email:
+        return (False, "Missing SENDGRID_API_KEY or recipient email")
     try:
-        import smtplib
-        from email.mime.text import MIMEText
-        msg = MIMEText(body)
-        msg["Subject"] = subject
-        msg["From"] = SMTP_EMAIL
-        msg["To"] = to_email
-        if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-                server.login(SMTP_EMAIL, SMTP_PASSWORD)
-                server.send_message(msg)
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail
+        message = Mail(
+            from_email=SENDGRID_FROM_EMAIL,
+            to_emails=to_email,
+            subject=subject,
+            plain_text_content=body)
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
+        if response.status_code in (200, 201, 202):
+            return (True, "")
         else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-                server.starttls()
-                server.login(SMTP_EMAIL, SMTP_PASSWORD)
-                server.send_message(msg)
-        return (True, "")
+            return (False, f"SendGrid HTTP {response.status_code}")
     except Exception as e:
         err = str(e)
         print(f"Email send error: {err}")
@@ -691,7 +686,7 @@ def cron_check_reminders(request: Request):
                         )
                     continue
 
-            if u["email"] and SMTP_EMAIL and SMTP_PASSWORD:
+            if u["email"] and SENDGRID_API_KEY:
                 ok, _ = send_email(u["email"], "🧭 Waypoint Reminders", text_body)
                 if ok:
                     email_sent += 1
@@ -1145,14 +1140,14 @@ def test_notification(request: Request):
     if not user:
         raise HTTPException(404, "User not found")
     results = []
-    if user["email"] and SMTP_EMAIL and SMTP_PASSWORD:
+    if user["email"] and SENDGRID_API_KEY:
         ok, err = send_email(user["email"], "🧭 Waypoint Test Notification", "This is a test notification from Waypoint! Your email notifications are working correctly. 🎉")
         if ok:
             results.append("email sent")
         else:
             results.append(f"email failed: {err[:120]}")
     else:
-        results.append("email skipped (no email set or SMTP not configured)")
+        results.append("email skipped (no email set or SendGrid not configured)")
     if user["phone"] and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
         try:
             send_sms(user["phone"], "🧭 Waypoint test notification! SMS working. 🎉")
