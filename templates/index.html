@@ -175,6 +175,23 @@
         .task-meta .tag.cat { background: rgba(154,101,225,0.1); color: #7c4dff; }
         .task-meta .tag.done-by { background: rgba(67,160,71,0.1); color: #2e7d32; }
 
+        .waypoint-bar {
+            margin: 4px 16px;
+            display: flex; gap: 6px;
+            overflow-x: auto; white-space: nowrap;
+            padding: 4px 0;
+            -webkit-overflow-scrolling: touch;
+        }
+        .waypoint-bar::-webkit-scrollbar { display: none; }
+        .waypoint-pill {
+            padding: 4px 14px; border-radius: 16px;
+            border: 1px solid #d0d5dd; background: white;
+            color: #667788; font-size: 12px; cursor: pointer;
+            transition: all 0.15s; flex-shrink: 0;
+        }
+        .waypoint-pill:hover { border-color: #4165e1; color: #4165e1; }
+        .waypoint-pill.active { background: #4165e1; border-color: #4165e1; color: white; }
+
         .task-actions { display: flex; gap: 6px; flex-shrink: 0; }
         .task-actions button {
             background: #f0f2f5; border: none; color: #667788;
@@ -397,6 +414,7 @@
         <button class="tab" onclick="switchTab('overdue',this)">Overdue</button>
         <button class="tab" onclick="switchTab('done',this)">Done</button>
     </div>
+    <div class="waypoint-bar" id="waypointBar"></div>
     <div class="task-list-view" id="taskList"></div>
 </div>
 
@@ -558,6 +576,7 @@
 <script>
 let tasks = [];
 let currentTab = 'all';
+let currentWaypoint = '';
 let currentView = 'list';
 let calYear = 0, calMonth = 0;
 let pendingCompleteId = null;
@@ -580,6 +599,7 @@ async function loadCategories() {
         if (resp && resp.categories) {
             userCats = resp.categories;
             populateCategorySelects();
+            renderWaypointBar();
         }
     } catch(e) {}
 }
@@ -620,6 +640,7 @@ function renderTasks() {
         filtered = filtered.filter(t => !t.completed && t.due_at && t.due_at < now);
     }
     else if (currentTab==='done') filtered = filtered.filter(t => t.completed);
+    if (currentWaypoint) filtered = filtered.filter(t => t.category === currentWaypoint);
 
     const list = document.getElementById('taskList');
     if (!filtered.length) {
@@ -665,6 +686,24 @@ function switchTab(tab, btn) {
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
     if (btn) btn.classList.add('active');
     renderTasks();
+}
+
+function renderWaypointBar() {
+    const bar = document.getElementById('waypointBar');
+    if (!bar) return;
+    let cats = userCats;
+    let html = '<span class="waypoint-pill'+(currentWaypoint===''?' active':'')+'" onclick="switchWaypoint(\'\')">All</span>';
+    cats.forEach(cat => {
+        let e = esc(cat);
+        html += '<span class="waypoint-pill'+(currentWaypoint===cat?' active':'')+'" onclick="switchWaypoint(\''+e+'\')">'+e+'</span>';
+    });
+    bar.innerHTML = html;
+}
+function switchWaypoint(cat) {
+    currentWaypoint = cat;
+    renderWaypointBar();
+    renderTasks();
+    if (currentView==='calendar') renderCalendar();
 }
 
 function switchView(view, btn) {
