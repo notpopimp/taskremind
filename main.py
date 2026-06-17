@@ -551,162 +551,149 @@ def cron_check_reminders(request: Request):
     if not vapid_private or not vapid_public:
         return {"sent": 0, "error": "VAPID keys not configured"}
 
-    now = datetime.utcnow()
-    conn = get_db()
-    cur = conn.cursor()
+    try:
+        now = datetime.utcnow()
+        conn = get_db()
+        cur = conn.cursor()
 
-    # Get all users
-    cur.execute("SELECT id, email, phone FROM users")
-    users = cur.fetchall()
+        # Get all users
+        cur.execute("SELECT id, email, phone FROM users")
+        users = cur.fetchall()
 
-    push_sent = 0
-    email_sent = 0
-    sms_sent = 0
-    for u in users:
-        uid = u["id"]
-        now_iso_str = now.isoformat()
+        push_sent = 0
+        email_sent = 0
+        sms_sent = 0
+        for u in users:
+            uid = u["id"]
+            now_iso_str = now.isoformat()
 
-        # Get tasks that need reminding (not completed, have due date, haven't been reminded yet)
-        cur.execute(
-            """SELECT id, title, due_at, remind_before, last_reminded_at FROM tasks
-               WHERE user_id = %s AND completed = 0 AND due_at IS NOT NULL
-               ORDER BY due_at ASC""",
-            (uid,),
-        )
-        all_tasks = cur.fetchall()
+            # Get tasks that need reminding
+            cur.execute(
+                """SELECT id, title, due_at, remind_before, last_reminded_at FROM tasks
+                   WHERE user_id = %s AND completed = 0 AND due_at IS NOT NULL
+                   ORDER BY due_at ASC""",
+                (uid,),
+            )
+            all_tasks = cur.fetchall()
 
-        lines = []
-        for t in all_tasks:
-            try:
-                due = datetime.fromisoformat(t["due_at"])
-            except:
-                continue
-
-            remind_before = t.get("remind_before", 0) or 0
-            alert_time = due - timedelta(minutes=remind_before)
-            last_reminded = t.get("last_reminded_at")
-
-            # Should we send a reminder?
-            should_remind = False
-            is_realert = False
-
-            if last_reminded is None:
-                # Never reminded — check if we're in the alert window (before or at due)
-                if now >= alert_time:
-                    should_remind = True
-            elif now > due:
-                # Already reminded and overdue — check escalating re-alert schedule
+            lines = []
+            for t in all_tasks:
                 try:
-                    last_dt = datetime.fromisoformat(last_reminded)
+                    due = datetime.fromisoformat(t["due_at"])
                 except:
-                    last_dt = now  # can't parse, skip
                     continue
 
-                mins_since_last = (now - last_dt).total_seconds() / 60.0
-                mins_overdue = (now - due).total_seconds() / 60.0
+                remind_before = t.get("remind_before", 0) or 0
+                alert_time = due - timedelta(minutes=remind_before)
+                last_reminded = t.get("last_reminded_at")
 
-                # Determine re-alert interval based on how overdue
-                if mins_overdue < 60:
-                    interval = 30  # every 30 min in first hour
-                elif mins_overdue < 240:
-                    interval = 60  # every 1 hr in first 4 hrs
-                elif mins_overdue < 1440:
-                    interval = 240  # every 4 hrs in first 24 hrs
-                else:
-                    interval = 1440  # every 24 hrs after that
+                should_remind = False
+                is_realert = False
 
-                if mins_since_last >= interval:
-                    should_remind = True
-                    is_realert = True
+                if last_reminded is None:
+                    if now >= alert_time:
+                        should_remind = True
+                elif now > due:
+                    try:
+                        last_dt = datetime.fromisoformat(last_reminded)
+                    except:
+                        continue
 
-            if should_remind:
-                # Format time for display
-                try:
-                    dt_str = due.strftime("%a %I:%M %p").lstrip("0")
-                except:
-                    dt_str = t["due_at"][:16]
+                    mins_since_last = (now - last_dt).total_seconds() / 60.0
+                    mins_overdue = (now - due).total_seconds() / 60.0
 
-                prefix = ""
-                if is_realert:
-                    prefix = "⏰ STILL DUE: "
-                elif remind_before > 0:
-                    if remind_before >= 10080:
-                        prefix = "[1 week early] "
-                    elif remind_before >= 4320:
-                        prefix = "[3 days early] "
-                    elif remind_before >= 1440:
-                        prefix = "[1 day early] "
-                    elif remind_before >= 60:
-                        prefix = "[1 hour early] "
+                    if mins_overdue < 60:
+                        interval = 30
+                    elif mins_overdue < 240:
+                        interval = 60
+                    elif mins_overdue < 1440:
+                        interval = 240
+                    else:
+                        interval = 1440
 
-                lines.append(f"{prefix}{dt_str} - {t['title'][:50]}")
+                    if mins_since_last >= interval:
+                        should_remind = True
+                        is_realert = True
 
-                # Mark as reminded
-                cur.execute(
-                    "UPDATE tasks SET last_reminded_at = %s WHERE id = %s",
-                    (now_iso_str, t["id"]),
-                )
+                if should_remind:
+                    try:
+                        dt_str = due.strftime("%a %I:%M %p").lstrip("0")
+                    except:
+                        dt_str = t["due_at"][:16]
 
-        if not lines:
-            continue
+                    prefix = ""
+                    if is_realert:
+                        prefix = "⏰ STILL DUE: "
+                    elif remind_before > 0:
+                        if remind_before >= 10080:
+                            prefix = "[1 week early] "
+                        elif remind_before >= 4320:
+                            prefix = "[3 days early] "
+                        elif remind_before >= 1440:
+                            prefix = "[1 day early] "
+                        elif remind_before >= 60:
+                            prefix = "[1 hour early] "
 
-        payload = {
-            "title": "🧭 Waypoint Reminders",
-            "body": "\n".join(lines),
-        }
+                    lines.append(f"{prefix}{dt_str} - {t['title'][:50]}")
 
-        # Build text body for email/SMS
-        text_body = "\n".join(lines)
-
-        # Get subscriptions for this user
-        cur.execute(
-            "SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = %s",
-            (uid,),
-        )
-        subs = cur.fetchall()
-
-        for sub in subs:
-            try:
-                from pywebpush import webpush
-
-                sub_info = {
-                    "endpoint": sub["endpoint"],
-                    "keys": {
-                        "p256dh": sub["p256dh"],
-                        "auth": sub["auth"],
-                    },
-                }
-                webpush(
-                    subscription_info=sub_info,
-                    data=json.dumps(payload),
-                    vapid_private_key=vapid_private,
-                    vapid_claims={"sub": "mailto:cagesliquidators@yahoo.com"},
-                )
-                push_sent += 1
-            except Exception as e:
-                # If subscription expired, remove it
-                if "410" in str(e) or "expired" in str(e).lower():
                     cur.execute(
-                        "DELETE FROM push_subs WHERE endpoint = %s",
-                        (sub["endpoint"],),
+                        "UPDATE tasks SET last_reminded_at = %s WHERE id = %s",
+                        (now_iso_str, t["id"]),
                     )
+
+            if not lines:
                 continue
 
-        # Send email notification if user has email and SMTP is configured
-        if u["email"] and SMTP_EMAIL and SMTP_PASSWORD:
-            if send_email(u["email"], "🧭 Waypoint Reminders", text_body):
-                email_sent += 1
+            payload = {
+                "title": "🧭 Waypoint Reminders",
+                "body": "\n".join(lines),
+            }
 
-        # Send SMS notification if user has phone and Twilio is configured
-        if u["phone"] and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
-            # Truncate SMS body (160 char limit for a single message)
-            sms_body = text_body[:160] if len(text_body) > 160 else text_body
-            if send_sms(u["phone"], sms_body):
-                sms_sent += 1
+            text_body = "\n".join(lines)
 
-    cur.close()
-    conn.close()
-    return {"push_sent": push_sent, "email_sent": email_sent, "sms_sent": sms_sent, "checked_users": len(users)}
+            cur.execute(
+                "SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = %s",
+                (uid,),
+            )
+            subs = cur.fetchall()
+
+            for sub in subs:
+                try:
+                    from pywebpush import webpush
+
+                    sub_info = {
+                        "endpoint": sub["endpoint"],
+                        "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]},
+                    }
+                    webpush(
+                        subscription_info=sub_info,
+                        data=json.dumps(payload),
+                        vapid_private_key=vapid_private,
+                        vapid_claims={"sub": "mailto:cagesliquidators@yahoo.com"},
+                    )
+                    push_sent += 1
+                except Exception as e:
+                    if "410" in str(e) or "expired" in str(e).lower():
+                        cur.execute(
+                            "DELETE FROM push_subs WHERE endpoint = %s",
+                            (sub["endpoint"],),
+                        )
+                    continue
+
+            if u["email"] and SMTP_EMAIL and SMTP_PASSWORD:
+                if send_email(u["email"], "🧭 Waypoint Reminders", text_body):
+                    email_sent += 1
+
+            if u["phone"] and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
+                sms_body = text_body[:160] if len(text_body) > 160 else text_body
+                if send_sms(u["phone"], sms_body):
+                    sms_sent += 1
+
+        cur.close()
+        conn.close()
+        return {"push_sent": push_sent, "email_sent": email_sent, "sms_sent": sms_sent, "checked_users": len(users)}
+    except Exception as e:
+        return {"error": str(e)}
 
 # ---------- Task Routes ----------
 @app.get("/api/tasks")
