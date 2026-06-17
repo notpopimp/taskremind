@@ -552,8 +552,8 @@ def cron_check_reminders(request: Request):
         return {"sent": 0, "error": "VAPID keys not configured"}
 
     try:
-        from datetime import timezone
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
+        now_naive = now
         conn = get_db()
         cur = conn.cursor()
 
@@ -581,6 +581,8 @@ def cron_check_reminders(request: Request):
             for t in all_tasks:
                 try:
                     due = datetime.fromisoformat(t["due_at"])
+                    if due.tzinfo is not None:
+                        due = due.replace(tzinfo=None)
                 except:
                     continue
 
@@ -597,6 +599,8 @@ def cron_check_reminders(request: Request):
                 elif now > due:
                     try:
                         last_dt = datetime.fromisoformat(last_reminded)
+                        if last_dt.tzinfo is not None:
+                            last_dt = last_dt.replace(tzinfo=None)
                     except:
                         continue
 
