@@ -464,15 +464,9 @@
             <a href="#" onclick="promoteToAdmin();return false" style="color:#4165e1;font-weight:600">Make me admin</a>
         </div>
         <div style="margin-top:12px;margin-bottom:8px;border-top:1px solid #e0e0e0;padding-top:10px">
-            <label style="font-size:13px;color:#1a1a2e;font-weight:600;display:block;margin-bottom:8px">📁 Edit Category Names</label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                <div><label style="font-size:11px;color:#98a2b3">Personal</label><input id="catPersonal" class="cat-input" style="width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;box-sizing:border-box"></div>
-                <div><label style="font-size:11px;color:#98a2b3">Work</label><input id="catWork" class="cat-input" style="width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;box-sizing:border-box"></div>
-                <div><label style="font-size:11px;color:#98a2b3">Chores</label><input id="catChores" class="cat-input" style="width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;box-sizing:border-box"></div>
-                <div><label style="font-size:11px;color:#98a2b3">Health</label><input id="catHealth" class="cat-input" style="width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;box-sizing:border-box"></div>
-                <div><label style="font-size:11px;color:#98a2b3">Finance</label><input id="catFinance" class="cat-input" style="width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;box-sizing:border-box"></div>
-                <div><label style="font-size:11px;color:#98a2b3">Other</label><input id="catOther" class="cat-input" style="width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;box-sizing:border-box"></div>
-            </div>
+            <label style="font-size:13px;color:#1a1a2e;font-weight:600;display:block;margin-bottom:6px">📁 Categories <span style="font-weight:normal;font-size:11px;color:#98a2b3">(up to 10)</span></label>
+            <div id="catEditorList"></div>
+            <button onclick="addCategoryField()" style="margin-top:4px;padding:5px 12px;border:1px dashed #4165e1;border-radius:6px;background:transparent;color:#4165e1;font-size:12px;cursor:pointer;width:100%">+ Add category</button>
         </div>
         <div class="modal-actions">
             <button class="modal-cancel" onclick="closeSettings()">Cancel</button>
@@ -558,7 +552,7 @@ let pendingCompleteId = null;
 let notesWithContent = new Set();
 let currentUser = null;
 let currentType = 'task';
-let userCats = { personal:'Ben', work:'Assistant Manager', chores:'Rachel', health:'Sam', finance:'Scheduled Time Off', other:'Call Offs' };
+let userCats = ["Personal", "Work", "Chores", "Health", "Scheduled Time Off", "Call Offs"];
 
 async function api(method, url, body) {
     const opts = { method, headers: {} };
@@ -570,25 +564,23 @@ async function api(method, url, body) {
 
 async function loadCategories() {
     try {
-        const cats = await api('GET', '/api/categories');
-        if (cats) {
-            userCats = cats;
+        const resp = await api('GET', '/api/categories');
+        if (resp && resp.categories) {
+            userCats = resp.categories;
             populateCategorySelects();
         }
     } catch(e) {}
 }
 
 function populateCategorySelects() {
-    const keys = ['personal','work','chores','health','finance','other'];
     const selects = ['newTaskCategory','newReminderCategory','editCategory'];
     selects.forEach(sid => {
         const sel = document.getElementById(sid);
         if (!sel) return;
         const currentVal = sel.value;
         sel.innerHTML = '<option value="">No category</option>';
-        keys.forEach(k => {
-            const label = userCats[k] || k;
-            sel.innerHTML += '<option value="'+k+'">'+esc(label)+'</option>';
+        userCats.forEach(label => {
+            sel.innerHTML += '<option value="'+esc(label)+'">'+esc(label)+'</option>';
         });
         sel.value = currentVal;
     });
@@ -633,7 +625,7 @@ function renderTasks() {
             catch(e) { timeStr = t.due_at; }
         }
         const recLabel = t.recurrence && t.recurrence!=='none' ? labels[t.recurrence]||'' : '';
-        const catLabel = t.category && userCats[t.category] ? userCats[t.category] : '';
+        const catLabel = t.category && userCats.includes(t.category) ? t.category : '';
         const doneBy = t.completed_by ? t.completed_by : '';
         return '<div class="task-item'+(t.completed?' completed':'')+(isOverdue?' overdue':'')+'">'+
             '<div class="task-priority '+(t.priority||'medium')+'"></div>'+
@@ -1012,12 +1004,7 @@ function openSettings() {
     if (currentUser) {
         document.getElementById('settingsPhone').value = currentUser.phone || '';
         document.getElementById('settingsEmail').value = currentUser.email || '';
-        // Load category names
-        const catMap = { catPersonal:'personal', catWork:'work', catChores:'chores', catHealth:'health', catFinance:'finance', catOther:'other' };
-        for (const [id, key] of Object.entries(catMap)) {
-            const el = document.getElementById(id);
-            if (el) el.value = userCats[key] || key;
-        }
+        renderCategoryEditor();
         // Show promote button only if not already admin and no other admin exists
         const promo = document.getElementById('adminPromo');
         promo.style.display = (currentUser.role !== 'admin') ? 'block' : 'none';
@@ -1037,20 +1024,41 @@ function openSettings() {
     document.getElementById('settingsModal').classList.add('show');
 }
 function closeSettings() { document.getElementById('settingsModal').classList.remove('show'); }
+
+function renderCategoryEditor() {
+    const container = document.getElementById('catEditorList');
+    if (!container) return;
+    container.innerHTML = '';
+    userCats.forEach((label, i) => {
+        container.innerHTML += '<div style="display:flex;gap:4px;margin-bottom:4px">' +
+            '<input class="cat-edit-input" value="'+esc(label)+'" maxlength="40" style="flex:1;padding:6px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;box-sizing:border-box">' +
+            '<button onclick="removeCategoryField(this)" style="padding:4px 8px;border:none;border-radius:6px;background:#ffebee;color:#c62828;cursor:pointer;font-size:14px">✕</button></div>';
+    });
+}
+function addCategoryField() {
+    const container = document.getElementById('catEditorList');
+    if (!container || container.children.length >= 10) return;
+    container.innerHTML += '<div style="display:flex;gap:4px;margin-bottom:4px">' +
+        '<input class="cat-edit-input" value="" maxlength="40" placeholder="New category" style="flex:1;padding:6px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;box-sizing:border-box">' +
+        '<button onclick="removeCategoryField(this)" style="padding:4px 8px;border:none;border-radius:6px;background:#ffebee;color:#c62828;cursor:pointer;font-size:14px">✕</button></div>';
+}
+function removeCategoryField(btn) {
+    btn.parentElement.remove();
+}
 async function saveSettings() {
     const phone = document.getElementById('settingsPhone').value.trim();
     const email = document.getElementById('settingsEmail').value.trim();
     await api('PUT', '/api/profile', { phone, email });
-    // Save categories
-    const catKeys = { catPersonal:'personal', catWork:'work', catChores:'chores', catHealth:'health', catFinance:'finance', catOther:'other' };
-    const catData = {};
-    for (const [id, key] of Object.entries(catKeys)) {
-        const el = document.getElementById(id);
-        if (el && el.value.trim()) catData[key] = el.value.trim();
-    }
-    if (Object.keys(catData).length > 0) {
-        const updated = await api('PUT', '/api/categories', catData);
-        if (updated) { userCats = updated; populateCategorySelects(); }
+    // Save categories from dynamic editor
+    const inputs = document.querySelectorAll('#catEditorList .cat-edit-input');
+    const catLabels = [];
+    inputs.forEach(inp => {
+        const val = inp.value.trim();
+        if (val) catLabels.push(val);
+    });
+    if (catLabels.length > 0) {
+        const updated = await api('PUT', '/api/categories', { categories: catLabels });
+        if (updated && updated.categories) { userCats = updated.categories; populateCategorySelects(); }
     }
     try { currentUser = await api('GET', '/api/me'); } catch(e) {}
     // Subscribe to push notifications

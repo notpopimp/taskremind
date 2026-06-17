@@ -372,14 +372,19 @@ def update_profile(request: Request, body: dict):
     return {"ok": True}
 
 # ---------- User Categories ----------
-DEFAULT_CATEGORIES = {
-    "personal": "Ben",
-    "work": "Assistant Manager",
-    "chores": "Rachel",
-    "health": "Sam",
-    "finance": "Scheduled Time Off",
-    "other": "Call Offs"
-}
+DEFAULT_CATEGORIES = ["Personal", "Work", "Chores", "Health", "Scheduled Time Off", "Call Offs"]
+
+def parse_cats(raw):
+    """Parse categories JSON string to list."""
+    if not raw:
+        return None
+    try:
+        val = json.loads(raw)
+        if isinstance(val, list) and all(isinstance(x, str) for x in val):
+            return val
+    except:
+        pass
+    return None
 
 @app.get("/api/categories")
 def get_categories(request: Request):
@@ -392,45 +397,37 @@ def get_categories(request: Request):
     conn.close()
     if not row:
         raise HTTPException(404, "User not found")
-    try:
-        cats = json.loads(row["categories"]) if row["categories"] else {}
-    except:
-        cats = {}
-    # Merge with defaults so missing keys get default names
-    result = dict(DEFAULT_CATEGORIES)
-    result.update(cats)
-    return result
+    cats = parse_cats(row["categories"])
+    if cats is None:
+        # Migration: if old format (dict), convert to sorted list of labels
+        try:
+            old = json.loads(row["categories"]) if row["categories"] else {}
+            if isinstance(old, dict):
+                cats = sorted(old.values())
+            else:
+                cats = list(DEFAULT_CATEGORIES)
+        except:
+            cats = list(DEFAULT_CATEGORIES)
+    return {"categories": cats}
 
 @app.put("/api/categories")
 def update_categories(request: Request, body: dict):
     uid = get_user(request)
-    # Validate: must be dict of string->string
-    if not isinstance(body, dict):
-        raise HTTPException(400, "Body must be a JSON object")
-    for k, v in body.items():
-        if not isinstance(k, str) or not isinstance(v, str):
-            raise HTTPException(400, "Keys and values must be strings")
-    allowed = set(DEFAULT_CATEGORIES.keys())
-    for k in body:
-        if k not in allowed:
-            raise HTTPException(400, f"Unknown category key: {k}")
-    # Merge: only update keys that are present
+    if not isinstance(body, dict) or "categories" not in body:
+        raise HTTPException(400, "Body must have a 'categories' key")
+    cats = body["categories"]
+    if not isinstance(cats, list) or not all(isinstance(x, str) for x in cats):
+        raise HTTPException(400, "categories must be an array of strings")
+    if len(cats) > 10:
+        raise HTTPException(400, "Maximum 10 categories allowed")
+    # Remove empty strings
+    cats = [c.strip() for c in cats if c.strip()]
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT categories FROM users WHERE id = %s", (uid,))
-    row = cur.fetchone()
-    try:
-        existing = json.loads(row["categories"]) if row and row["categories"] else {}
-    except:
-        existing = {}
-    existing.update(body)
-    cur.execute("UPDATE users SET categories = %s WHERE id = %s", (json.dumps(existing), uid))
+    cur.execute("UPDATE users SET categories = %s WHERE id = %s", (json.dumps(cats), uid))
     cur.close()
     conn.close()
-    # Return merged with defaults
-    result = dict(DEFAULT_CATEGORIES)
-    result.update(existing)
-    return result
+    return {"categories": cats}
 
 @app.post("/api/push/subscribe")
 def push_subscribe(request: Request, body: dict):
