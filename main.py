@@ -517,7 +517,7 @@ def send_email(to_email: str, subject: str, body: str) -> tuple:
         msg["Subject"] = subject
         msg["From"] = SMTP_EMAIL
         msg["To"] = to_email
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
             server.starttls()
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.send_message(msg)

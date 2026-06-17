@@ -1086,10 +1086,22 @@ async function testNotification() {
     btn.disabled = true;
     btn.textContent = '⏳ Sending...';
     try {
-        const res = await api('POST', '/api/test-notification');
-        showToast('Test: ' + (res.status || 'done'));
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        const res = await fetch('/api/test-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+        const data = await res.json();
+        showToast('Test: ' + (data.status || 'done'));
     } catch(e) {
-        showToast('Test failed: ' + e.message);
+        if (e.name === 'AbortError') {
+            showToast('Test timed out — SMTP server unreachable');
+        } else {
+            showToast('Test failed: ' + e.message);
+        }
     }
     btn.disabled = false;
     btn.textContent = '📧 Test Email Notification';
