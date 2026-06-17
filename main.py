@@ -720,7 +720,16 @@ def save_note(request: Request, date: str, body: NotePut):
     conn.close()
     return {"ok": True}
 
-# ---------- Share Routes ----------
+@app.get("/api/db/push_subs_count")
+def push_subs_count():
+    """Debug: return count of push subscriptions."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) as cnt FROM push_subs")
+    cnt = cur.fetchone()["cnt"]
+    cur.close()
+    conn.close()
+    return {"count": cnt}
 @app.post("/api/shares")
 def create_share(request: Request, body: ShareRequest = None):
     if body is None:
