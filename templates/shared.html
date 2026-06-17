@@ -177,11 +177,25 @@
     </div>
 
     <!-- Add task bar (edit only) -->
-    <div id="addBar" class="add-bar" style="display:none;flex-wrap:wrap">
-        <input type="text" id="newTitle" placeholder="New task..." style="flex:2;min-width:120px">
-        <input type="datetime-local" id="newDue" style="flex:1;min-width:100px">
-        <select id="newCat" style="flex:1;min-width:80px"><option value="">No cat</option></select>
-        <button class="add-btn" onclick="addTask()">+ Add</button>
+    <div id="addBar" class="add-bar" style="display:none;flex-direction:column;gap:6px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <input type="text" id="newTitle" placeholder="New task..." style="flex:2;min-width:120px;padding:10px 12px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;outline:none">
+            <div style="display:flex;gap:4px">
+                <button id="typeTaskBtn" onclick="setType('task')" style="padding:8px 12px;border:1px solid #d0d5dd;border-radius:8px;background:#4165e1;color:white;font-size:12px;cursor:pointer;font-weight:600">Task</button>
+                <button id="typeRemBtn" onclick="setType('reminder')" style="padding:8px 12px;border:1px solid #d0d5dd;border-radius:8px;background:transparent;color:#667788;font-size:12px;cursor:pointer">Reminder</button>
+            </div>
+        </div>
+        <div id="taskFields" style="display:flex;gap:6px;flex-wrap:wrap">
+            <input type="datetime-local" id="newDue" style="flex:1;min-width:100px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none">
+            <select id="newCat" style="flex:1;min-width:80px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none;background:white"><option value="">No category</option></select>
+            <button class="add-btn" onclick="addTask()" style="padding:10px 16px;border:none;border-radius:8px;background:#4165e1;color:white;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">+ Add</button>
+        </div>
+        <div id="remFields" style="display:none;gap:6px;flex-wrap:wrap">
+            <input type="date" id="newRemStart" style="flex:1;min-width:80px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none">
+            <input type="date" id="newRemEnd" style="flex:1;min-width:80px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none">
+            <select id="newRemCat" style="flex:1;min-width:80px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none;background:white"><option value="">No category</option></select>
+            <button class="add-btn" onclick="addReminder()" style="padding:10px 16px;border:none;border-radius:8px;background:#4165e1;color:white;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">+ Add</button>
+        </div>
     </div>
 
     <!-- Task List -->
@@ -274,7 +288,7 @@ async function loadTasks() {
 }
 
 function populateCats() {
-    const selects = ['newCat', 'editCategory'];
+    const selects = ['newCat', 'newRemCat', 'editCategory'];
     selects.forEach(sid => {
         const sel = document.getElementById(sid);
         if (!sel) return;
@@ -332,6 +346,36 @@ async function addTask() {
     document.getElementById('newTitle').value = '';
     document.getElementById('newDue').value = '';
     showToast('Task added');
+    await loadTasks();
+}
+
+function setType(type) {
+    document.getElementById('typeTaskBtn').style.background = type === 'task' ? '#4165e1' : 'transparent';
+    document.getElementById('typeTaskBtn').style.color = type === 'task' ? 'white' : '#667788';
+    document.getElementById('typeRemBtn').style.background = type === 'reminder' ? '#4165e1' : 'transparent';
+    document.getElementById('typeRemBtn').style.color = type === 'reminder' ? 'white' : '#667788';
+    document.getElementById('taskFields').style.display = type === 'task' ? 'flex' : 'none';
+    document.getElementById('remFields').style.display = type === 'reminder' ? 'flex' : 'none';
+    document.getElementById('typeTaskBtn').style.fontWeight = type === 'task' ? '600' : 'normal';
+    document.getElementById('typeRemBtn').style.fontWeight = type === 'reminder' ? '600' : 'normal';
+}
+
+async function addReminder() {
+    const title = document.getElementById('newTitle').value.trim();
+    if (!title) return;
+    const start = document.getElementById('newRemStart').value;
+    const end = document.getElementById('newRemEnd').value;
+    const cat = document.getElementById('newRemCat').value;
+    if (!start) { showToast('Pick a start date'); return; }
+    await api('POST', '/api/shared/' + shareId + '/tasks', {
+        title, category: cat,
+        start_at: start,
+        due_at: end || start,
+        end_at: end || null,
+        is_reminder: true
+    });
+    document.getElementById('newTitle').value = '';
+    showToast('Reminder added');
     await loadTasks();
 }
 
