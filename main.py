@@ -380,7 +380,7 @@ def update_profile(request: Request, body: dict):
     return {"ok": True}
 
 # ---------- User Categories ----------
-DEFAULT_CATEGORIES = ["Personal", "Work", "Chores", "Health", "Scheduled Time Off", "Call Offs"]
+DEFAULT_CATEGORIES = ["Personal", "Work", "Chores", "Health", "Scheduled", "Time Off", "Call Offs"]
 
 def parse_cats(raw):
     """Parse categories JSON string to list."""
