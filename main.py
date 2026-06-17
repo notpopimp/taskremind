@@ -2,6 +2,7 @@ import os
 import uuid
 import hashlib
 import secrets
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -122,7 +123,8 @@ def init_db():
     """)
     # Add user columns if upgrading
     for col, dtype in [("role", "TEXT DEFAULT 'user'"),
-                       ("phone", "TEXT DEFAULT ''"), ("email", "TEXT DEFAULT ''")]:
+                       ("phone", "TEXT DEFAULT ''"), ("email", "TEXT DEFAULT ''"),
+                       ("categories", "TEXT DEFAULT '{}'")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='users' AND column_name='{col}'
@@ -327,13 +329,18 @@ def whoami(request: Request):
     uid = get_user(request)
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, username, role, phone, email FROM users WHERE id = %s", (uid,))
+    cur.execute("SELECT id, username, role, phone, email, categories FROM users WHERE id = %s", (uid,))
     user = cur.fetchone()
     cur.close()
     conn.close()
     if not user:
         raise HTTPException(404, "User not found")
-    return dict(user)
+    ud = dict(user)
+    try:
+        ud["categories"] = json.loads(ud.get("categories", "{}"))
+    except:
+        ud["categories"] = {}
+    return ud
 
 @app.get("/api/me/promote")
 def promote_to_admin(request: Request):
@@ -363,6 +370,67 @@ def update_profile(request: Request, body: dict):
     cur.close()
     conn.close()
     return {"ok": True}
+
+# ---------- User Categories ----------
+DEFAULT_CATEGORIES = {
+    "personal": "Ben",
+    "work": "Assistant Manager",
+    "chores": "Rachel",
+    "health": "Sam",
+    "finance": "Scheduled Time Off",
+    "other": "Call Offs"
+}
+
+@app.get("/api/categories")
+def get_categories(request: Request):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT categories FROM users WHERE id = %s", (uid,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "User not found")
+    try:
+        cats = json.loads(row["categories"]) if row["categories"] else {}
+    except:
+        cats = {}
+    # Merge with defaults so missing keys get default names
+    result = dict(DEFAULT_CATEGORIES)
+    result.update(cats)
+    return result
+
+@app.put("/api/categories")
+def update_categories(request: Request, body: dict):
+    uid = get_user(request)
+    # Validate: must be dict of string->string
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Body must be a JSON object")
+    for k, v in body.items():
+        if not isinstance(k, str) or not isinstance(v, str):
+            raise HTTPException(400, "Keys and values must be strings")
+    allowed = set(DEFAULT_CATEGORIES.keys())
+    for k in body:
+        if k not in allowed:
+            raise HTTPException(400, f"Unknown category key: {k}")
+    # Merge: only update keys that are present
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT categories FROM users WHERE id = %s", (uid,))
+    row = cur.fetchone()
+    try:
+        existing = json.loads(row["categories"]) if row and row["categories"] else {}
+    except:
+        existing = {}
+    existing.update(body)
+    cur.execute("UPDATE users SET categories = %s WHERE id = %s", (json.dumps(existing), uid))
+    cur.close()
+    conn.close()
+    # Return merged with defaults
+    result = dict(DEFAULT_CATEGORIES)
+    result.update(existing)
+    return result
 
 @app.post("/api/push/subscribe")
 def push_subscribe(request: Request, body: dict):
