@@ -552,7 +552,8 @@ def cron_check_reminders(request: Request):
         return {"sent": 0, "error": "VAPID keys not configured"}
 
     try:
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
         conn = get_db()
         cur = conn.cursor()
 
