@@ -39,6 +39,7 @@ class TaskCreate(BaseModel):
     start_at: str | None = None
     is_reminder: bool = False
     end_at: str | None = None
+    remind_before: int = 0
 
 class TaskToggle(BaseModel):
     completed_by: str | None = None
@@ -53,6 +54,7 @@ class TaskUpdate(BaseModel):
     start_at: str | None = None
     is_reminder: bool | None = None
     end_at: str | None = None
+    remind_before: int | None = None
 
 class NotePut(BaseModel):
     content: str = ""
@@ -102,7 +104,8 @@ def init_db():
     for col, dtype in [("completed_by", "TEXT DEFAULT ''"), ("recurrence", "TEXT DEFAULT 'none'"),
                        ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''"),
                        ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL"),
-                       ("start_at", "TEXT DEFAULT NULL")]:
+                       ("start_at", "TEXT DEFAULT NULL"), ("remind_before", "INTEGER DEFAULT 0"),
+                       ("last_reminded_at", "TEXT DEFAULT NULL")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='tasks' AND column_name='{col}'
@@ -567,48 +570,88 @@ def cron_check_reminders(request: Request):
     sms_sent = 0
     for u in users:
         uid = u["id"]
-        # Check for reminders due today
-        cur.execute(
-            """SELECT id, title, due_at, start_at, end_at FROM tasks
-               WHERE user_id = %s AND is_reminder = 1 AND completed = 0
-               AND ((due_at IS NOT NULL AND due_at >= %s AND due_at < %s)
-                    OR (start_at IS NOT NULL AND start_at <= %s AND end_at >= %s))
-               ORDER BY due_at ASC""",
-            (uid, today_start.isoformat(), today_end.isoformat(),
-             today_end.isoformat(), today_start.isoformat()),
-        )
-        reminders = cur.fetchall()
+        now_iso_str = now.isoformat()
 
-        # Also check for overdue tasks
+        # Get tasks that need reminding (not completed, have due date, haven't been reminded yet)
         cur.execute(
-            """SELECT id, title, due_at FROM tasks
+            """SELECT id, title, due_at, remind_before, last_reminded_at FROM tasks
                WHERE user_id = %s AND completed = 0 AND due_at IS NOT NULL
-               AND due_at < %s AND due_at >= %s
                ORDER BY due_at ASC""",
-            (uid, today_start.isoformat(), (today_start - timedelta(days=1)).isoformat()),
+            (uid,),
         )
-        overdue = cur.fetchall()
+        all_tasks = cur.fetchall()
 
-        if not reminders and not overdue:
-            continue
-
-        # Build notification payload
         lines = []
-        for r in reminders:
-            dt = r.get("due_at") or r.get("start_at") or ""
-            if dt:
-                try:
-                    d = datetime.fromisoformat(dt)
-                    dt_str = d.strftime("%I:%M %p").lstrip("0")
-                except:
-                    dt_str = dt[:5]
-            else:
-                dt_str = ""
-            title = r["title"][:50]
-            lines.append(f"{dt_str} - {title}")
+        for t in all_tasks:
+            try:
+                due = datetime.fromisoformat(t["due_at"])
+            except:
+                continue
 
-        for r in overdue[:3]:
-            lines.append(f"OVERDUE: {r['title'][:50]}")
+            remind_before = t.get("remind_before", 0) or 0
+            alert_time = due - timedelta(minutes=remind_before)
+            last_reminded = t.get("last_reminded_at")
+
+            # Should we send a reminder?
+            should_remind = False
+            is_realert = False
+
+            if last_reminded is None:
+                # Never reminded — check if we're in the alert window (before or at due)
+                if now >= alert_time:
+                    should_remind = True
+            elif now > due:
+                # Already reminded and overdue — check escalating re-alert schedule
+                try:
+                    last_dt = datetime.fromisoformat(last_reminded)
+                except:
+                    last_dt = now  # can't parse, skip
+                    continue
+
+                mins_since_last = (now - last_dt).total_seconds() / 60.0
+                mins_overdue = (now - due).total_seconds() / 60.0
+
+                # Determine re-alert interval based on how overdue
+                if mins_overdue < 60:
+                    interval = 30  # every 30 min in first hour
+                elif mins_overdue < 240:
+                    interval = 60  # every 1 hr in first 4 hrs
+                elif mins_overdue < 1440:
+                    interval = 240  # every 4 hrs in first 24 hrs
+                else:
+                    interval = 1440  # every 24 hrs after that
+
+                if mins_since_last >= interval:
+                    should_remind = True
+                    is_realert = True
+
+            if should_remind:
+                # Format time for display
+                try:
+                    dt_str = due.strftime("%a %I:%M %p").lstrip("0")
+                except:
+                    dt_str = t["due_at"][:16]
+
+                prefix = ""
+                if is_realert:
+                    prefix = "⏰ STILL DUE: "
+                elif remind_before > 0:
+                    if remind_before >= 10080:
+                        prefix = "[1 week early] "
+                    elif remind_before >= 4320:
+                        prefix = "[3 days early] "
+                    elif remind_before >= 1440:
+                        prefix = "[1 day early] "
+                    elif remind_before >= 60:
+                        prefix = "[1 hour early] "
+
+                lines.append(f"{prefix}{dt_str} - {t['title'][:50]}")
+
+                # Mark as reminded
+                cur.execute(
+                    "UPDATE tasks SET last_reminded_at = %s WHERE id = %s",
+                    (now_iso_str, t["id"]),
+                )
 
         if not lines:
             continue
@@ -693,8 +736,8 @@ def create_task(request: Request, body: TaskCreate):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at, is_reminder, end_at, start_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
-        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now_iso(), int(body.is_reminder), body.end_at or None, body.start_at or None),
+        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at, is_reminder, end_at, start_at, remind_before) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now_iso(), int(body.is_reminder), body.end_at or None, body.start_at or None, body.remind_before),
     )
     task = cur.fetchone()
     cur.close()
@@ -798,6 +841,8 @@ def update_task(request: Request, task_id: str, body: TaskUpdate):
         cur.execute("UPDATE tasks SET is_reminder = %s WHERE id = %s", (int(body.is_reminder), task_id))
     if body.end_at is not None:
         cur.execute("UPDATE tasks SET end_at = %s WHERE id = %s", (body.end_at or None, task_id))
+    if body.remind_before is not None:
+        cur.execute("UPDATE tasks SET remind_before = %s WHERE id = %s", (body.remind_before, task_id))
     if body.title is not None and body.title.strip() == '':
         cur.execute("UPDATE tasks SET title = %s WHERE id = %s", ('', task_id))
     cur.close()

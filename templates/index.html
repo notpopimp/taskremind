@@ -357,6 +357,13 @@
                 <option value="">No category</option>
             </select>
             <input type="datetime-local" id="newTaskDue">
+            <select id="newTaskRemindBefore">
+                <option value="0">At due time</option>
+                <option value="60">1 hour before</option>
+                <option value="1440">1 day before</option>
+                <option value="4320">3 days before</option>
+                <option value="10080">1 week before</option>
+            </select>
             <select id="newTaskRecur">
                 <option value="none">No repeat</option>
                 <option value="daily">Daily</option>
@@ -526,6 +533,16 @@
                     <option value="monthly">Monthly</option>
                     <option value="quarterly">Quarterly</option>
                     <option value="yearly">Yearly</option>
+                </select>
+            </div>
+            <div style="flex:1;min-width:120px" id="editRemindGroup">
+                <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Remind me</label>
+                <select id="editRemindBefore" style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px">
+                    <option value="0">At due time</option>
+                    <option value="60">1 hour before</option>
+                    <option value="1440">1 day before</option>
+                    <option value="4320">3 days before</option>
+                    <option value="10080">1 week before</option>
                 </select>
             </div>
         </div>
@@ -804,12 +821,13 @@ async function addTask() {
         const category = document.getElementById('newTaskCategory').value || '';
         let due_at = null;
         if (dueInput) { due_at = new Date(dueInput).toISOString(); }
-        await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, category });
+        await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, category, remind_before: parseInt(document.getElementById('newTaskRemindBefore').value) || 0 });
     }
     document.getElementById('newTaskTitle').value='';
     document.getElementById('newTaskDesc').value='';
     document.getElementById('newTaskDue').value='';
     document.getElementById('newTaskRecur').value='none';
+    document.getElementById('newTaskRemindBefore').value='0';
     await loadTasks();
 }
 
@@ -930,6 +948,7 @@ function openEditTask(id) {
     document.getElementById('editPriority').closest('div').style.display = isReminder ? 'none' : '';
     document.getElementById('editDueGroup').style.display = isReminder ? 'none' : '';
     document.getElementById('editRecurGroup').style.display = isReminder ? 'none' : '';
+    document.getElementById('editRemindGroup').style.display = isReminder ? 'none' : '';
     document.querySelectorAll('.reminder-field').forEach(el => el.style.display = isReminder ? '' : 'none');
     if (!isReminder) {
         document.getElementById('editPriority').value = task.priority || 'medium';
@@ -940,6 +959,7 @@ function openEditTask(id) {
             document.getElementById('editDue').value = '';
         }
         document.getElementById('editRecur').value = task.recurrence || 'none';
+        document.getElementById('editRemindBefore').value = task.remind_before || 0;
     } else {
         if (task.start_at) {
             try { document.getElementById('editStart').value = task.start_at.slice(0,10); }
@@ -987,6 +1007,7 @@ async function saveEditTask() {
         updateData.priority = priority;
         updateData.recurrence = recurrence;
         updateData.due_at = due_at;
+        updateData.remind_before = parseInt(document.getElementById('editRemindBefore').value) || 0;
     }
     await api('PUT', '/api/tasks/' + editTaskId, updateData);
     closeEditModal();
