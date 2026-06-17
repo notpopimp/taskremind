@@ -915,6 +915,92 @@ def toggle_shared_task(share_id: str, task_id: str):
     conn.close()
     return {"ok": True, "completed": bool(new_val)}
 
+def _get_share_or_404(share_id):
+    """Helper: fetch share row or raise 404."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM shares WHERE id = %s", (share_id,))
+    share = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not share:
+        raise HTTPException(404, "Share not found")
+    return share
+
+def _require_edit(share):
+    if share["permission"] != "edit":
+        raise HTTPException(403, "View-only share")
+
+@app.post("/api/shared/{share_id}/tasks")
+def create_shared_task(share_id: str, body: TaskCreate = None):
+    share = _get_share_or_404(share_id)
+    _require_edit(share)
+    if body is None:
+        body = TaskCreate()
+    uid = share["user_id"]
+    task_id = uuid.uuid4().hex[:12]
+    now = now_iso()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at, is_reminder, end_at, start_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now, int(body.is_reminder), body.end_at or None, body.start_at or None),
+    )
+    task = cur.fetchone()
+    cur.close()
+    conn.close()
+    return dict(task)
+
+@app.put("/api/shared/{share_id}/tasks/{task_id}")
+def update_shared_task(share_id: str, task_id: str, body: TaskUpdate = None):
+    share = _get_share_or_404(share_id)
+    _require_edit(share)
+    if body is None:
+        return {"ok": True}
+    uid = share["user_id"]
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM tasks WHERE id = %s AND user_id = %s", (task_id, uid))
+    if not cur.fetchone():
+        cur.close()
+        conn.close()
+        raise HTTPException(404, "Task not found")
+    updates = {}
+    for field in ["title", "description", "due_at", "recurrence", "priority", "category", "start_at", "end_at", "is_reminder"]:
+        val = getattr(body, field, None)
+        if val is not None:
+            updates[field] = val
+    if updates:
+        set_clause = ", ".join(f"{k} = %s" for k in updates)
+        vals = list(updates.values()) + [task_id, uid]
+        cur.execute(f"UPDATE tasks SET {set_clause} WHERE id = %s AND user_id = %s", vals)
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
+@app.get("/api/shared/{share_id}/me")
+def shared_me(share_id: str):
+    """Return shared user info for the viewing page."""
+    share = _get_share_or_404(share_id)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT username, categories FROM users WHERE id = %s", (share["user_id"],))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not user:
+        raise HTTPException(404, "User not found")
+    # Parse categories
+    try:
+        cats = json.loads(user["categories"]) if user["categories"] else []
+        if isinstance(cats, dict):
+            cats = sorted(cats.values())
+        elif not isinstance(cats, list):
+            cats = list(DEFAULT_CATEGORIES)
+    except:
+        cats = list(DEFAULT_CATEGORIES)
+    return {"username": user["username"], "categories": cats, "permission": share["permission"]}
+
 # ---------- Reminder Check ----------
 @app.get("/api/reminders")
 def check_reminders(request: Request):
