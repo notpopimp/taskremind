@@ -540,16 +540,9 @@ def send_sms(to_phone: str, body: str) -> bool:
         return False
 
 @app.post("/api/cron/check-reminders")
-async def cron_check_reminders(request: Request):
+def cron_check_reminders(request: Request):
     """Called by Railway cron: sends push notifications for due reminders."""
-    body_data = {}
-    try:
-        raw = await request.body()
-        if raw:
-            body_data = json.loads(raw)
-    except:
-        pass
-    auth = body_data.get("secret", "") or request.query_params.get("secret", "")
+    auth = request.query_params.get("secret", "")
     if not CRON_SECRET or auth != CRON_SECRET:
         raise HTTPException(401, "Invalid cron secret")
 
