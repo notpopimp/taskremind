@@ -274,7 +274,7 @@ def index(request: Request):
         return HTMLResponse("""
         <html><body style="font-family:sans-serif;background:#f0f2f5;color:#1a1a2e;display:flex;align-items:center;justify-content:center;height:100vh">
         <div style="text-align:center">
-            <h1 style="color:#4165e1">⏰ TaskRemind</h1>
+            <h1 style="color:#4165e1">🧭 Waypoint</h1>
             <p style="color:#e53935">Database not configured yet.</p>
             <p style="color:#98a2b3">Set <code>DATABASE_URL</code> in Railway Variables, then redeploy.</p>
         </div></body></html>
@@ -493,6 +493,49 @@ if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
     except Exception as e:
         print(f"Could not generate VAPID keys: {e}")
 
+# ---------- Email / SMS Notifications ----------
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_EMAIL = os.environ.get("SMTP_EMAIL", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
+TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER", "")
+
+def send_email(to_email: str, subject: str, body: str) -> bool:
+    """Send email via SMTP. Returns True on success."""
+    if not SMTP_EMAIL or not SMTP_PASSWORD or not to_email:
+        return False
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = SMTP_EMAIL
+        msg["To"] = to_email
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"Email send error: {e}")
+        return False
+
+def send_sms(to_phone: str, body: str) -> bool:
+    """Send SMS via Twilio. Returns True on success."""
+    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN or not TWILIO_PHONE_NUMBER or not to_phone:
+        return False
+    try:
+        from twilio.rest import Client
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        client.messages.create(body=body, from_=TWILIO_PHONE_NUMBER, to=to_phone)
+        return True
+    except Exception as e:
+        print(f"SMS send error: {e}")
+        return False
+
 @app.post("/api/cron/check-reminders")
 def cron_check_reminders(request: Request):
     """Called by Railway cron: sends push notifications for due reminders."""
@@ -515,12 +558,15 @@ def cron_check_reminders(request: Request):
     conn = get_db()
     cur = conn.cursor()
 
-    # Get all users with push subscriptions
-    cur.execute("SELECT DISTINCT user_id FROM push_subs")
-    user_ids = [r["user_id"] for r in cur.fetchall()]
+    # Get all users (check reminders for everyone, not just push subscribers)
+    cur.execute("SELECT id, email, phone FROM users")
+    users = cur.fetchall()
 
-    total_sent = 0
-    for uid in user_ids:
+    push_sent = 0
+    email_sent = 0
+    sms_sent = 0
+    for u in users:
+        uid = u["id"]
         # Check for reminders due today
         cur.execute(
             """SELECT id, title, due_at, start_at, end_at FROM tasks
@@ -568,9 +614,12 @@ def cron_check_reminders(request: Request):
             continue
 
         payload = {
-            "title": "📋 TaskRemind Reminders",
+            "title": "🧭 Waypoint Reminders",
             "body": "\n".join(lines),
         }
+
+        # Build text body for email/SMS
+        text_body = "\n".join(lines)
 
         # Get subscriptions for this user
         cur.execute(
@@ -596,7 +645,7 @@ def cron_check_reminders(request: Request):
                     vapid_private_key=vapid_private,
                     vapid_claims={"sub": "mailto:cagesliquidators@yahoo.com"},
                 )
-                total_sent += 1
+                push_sent += 1
             except Exception as e:
                 # If subscription expired, remove it
                 if "410" in str(e) or "expired" in str(e).lower():
@@ -606,9 +655,21 @@ def cron_check_reminders(request: Request):
                     )
                 continue
 
+        # Send email notification if user has email and SMTP is configured
+        if u["email"] and SMTP_EMAIL and SMTP_PASSWORD:
+            if send_email(u["email"], "🧭 Waypoint Reminders", text_body):
+                email_sent += 1
+
+        # Send SMS notification if user has phone and Twilio is configured
+        if u["phone"] and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
+            # Truncate SMS body (160 char limit for a single message)
+            sms_body = text_body[:160] if len(text_body) > 160 else text_body
+            if send_sms(u["phone"], sms_body):
+                sms_sent += 1
+
     cur.close()
     conn.close()
-    return {"sent": total_sent, "checked_users": len(user_ids)}
+    return {"push_sent": push_sent, "email_sent": email_sent, "sms_sent": sms_sent, "checked_users": len(users)}
 
 # ---------- Task Routes ----------
 @app.get("/api/tasks")

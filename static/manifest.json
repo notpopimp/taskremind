@@ -1,5 +1,5 @@
 {
-    "name": "TaskRemind",
+    "name": "Waypoint",
     "short_name": "Tasks",
     "start_url": "/",
     "display": "standalone",

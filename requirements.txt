@@ -6,3 +6,4 @@ pydantic>=2.7.0
 starlette>=0.37.2,<0.39.0
 pywebpush>=1.14.0
 cryptography>=41.0.0
+twilio>=8.0.0
