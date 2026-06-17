@@ -167,6 +167,14 @@ static_dir = BASE_DIR / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# Serve service worker from root so it has correct scope
+sw_path = static_dir / "service-worker.js"
+if sw_path.exists():
+    sw_content = sw_path.read_text()
+    @app.get("/service-worker.js")
+    def service_worker():
+        return Response(content=sw_content, media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+
 jinja_env = Environment(
     loader=FileSystemLoader(str(BASE_DIR / "templates")),
     autoescape=select_autoescape(["html", "xml"]),

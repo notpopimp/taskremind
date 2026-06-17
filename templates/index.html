@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#4165e1">
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/static/service-worker.js');
+            navigator.serviceWorker.register('/service-worker.js');
         }
     </script>
     <style>
@@ -1081,15 +1081,20 @@ async function subscribePush() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
     try {
         const reg = await navigator.serviceWorker.ready;
-        // Get VAPID key
         const vapidResp = await api('GET', '/api/push/vapid');
-        if (!vapidResp.publicKey) return; // No VAPID configured yet
+        if (!vapidResp || !vapidResp.publicKey) {
+            console.log('Push: No VAPID public key');
+            return;
+        }
         const sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(vapidResp.publicKey)
         });
         await api('POST', '/api/push/subscribe', sub.toJSON());
-    } catch(e) { /* push not available */ }
+        console.log('Push: Subscribed successfully');
+    } catch(e) {
+        console.log('Push error:', e.message || e);
+    }
 }
 // Helper for VAPID key conversion
 function urlBase64ToUint8Array(base64String) {
