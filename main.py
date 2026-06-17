@@ -506,10 +506,10 @@ TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
 TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER", "")
 
-def send_email(to_email: str, subject: str, body: str) -> bool:
-    """Send email via SMTP. Returns True on success."""
+def send_email(to_email: str, subject: str, body: str) -> tuple:
+    """Send email via SMTP. Returns (True, '') on success or (False, error_msg)."""
     if not SMTP_EMAIL or not SMTP_PASSWORD or not to_email:
-        return False
+        return (False, "Missing SMTP config or recipient email")
     try:
         import smtplib
         from email.mime.text import MIMEText
@@ -521,10 +521,11 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
             server.starttls()
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.send_message(msg)
-        return True
+        return (True, "")
     except Exception as e:
-        print(f"Email send error: {e}")
-        return False
+        err = str(e)
+        print(f"Email send error: {err}")
+        return (False, err)
 
 def send_sms(to_phone: str, body: str) -> bool:
     """Send SMS via Twilio. Returns True on success."""
@@ -686,7 +687,8 @@ def cron_check_reminders(request: Request):
                     continue
 
             if u["email"] and SMTP_EMAIL and SMTP_PASSWORD:
-                if send_email(u["email"], "🧭 Waypoint Reminders", text_body):
+                ok, _ = send_email(u["email"], "🧭 Waypoint Reminders", text_body)
+                if ok:
                     email_sent += 1
 
             if u["phone"] and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
@@ -1139,10 +1141,11 @@ def test_notification(request: Request):
         raise HTTPException(404, "User not found")
     results = []
     if user["email"] and SMTP_EMAIL and SMTP_PASSWORD:
-        if send_email(user["email"], "🧭 Waypoint Test Notification", "This is a test notification from Waypoint! Your email notifications are working correctly. 🎉"):
+        ok, err = send_email(user["email"], "🧭 Waypoint Test Notification", "This is a test notification from Waypoint! Your email notifications are working correctly. 🎉")
+        if ok:
             results.append("email sent")
         else:
-            results.append("email failed")
+            results.append(f"email failed: {err[:120]}")
     else:
         results.append("email skipped (no email set or SMTP not configured)")
     if user["phone"] and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
