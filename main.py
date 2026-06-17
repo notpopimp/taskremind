@@ -552,15 +552,10 @@ def cron_check_reminders(request: Request):
         return {"sent": 0, "error": "VAPID keys not configured"}
 
     now = datetime.utcnow()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = today_start + timedelta(days=1)
-    tomorrow_start = today_end
-    tomorrow_end = tomorrow_start + timedelta(days=1)
-
     conn = get_db()
     cur = conn.cursor()
 
-    # Get all users (check reminders for everyone, not just push subscribers)
+    # Get all users
     cur.execute("SELECT id, email, phone FROM users")
     users = cur.fetchall()
 
