@@ -416,6 +416,9 @@ def get_categories(request: Request):
                 cats = list(DEFAULT_CATEGORIES)
         except:
             cats = list(DEFAULT_CATEGORIES)
+    # Fallback if empty
+    if not cats:
+        cats = list(DEFAULT_CATEGORIES)
     return {"categories": cats}
 
 @app.put("/api/categories")
@@ -996,6 +999,8 @@ def shared_me(share_id: str):
         if isinstance(cats, dict):
             cats = sorted(cats.values())
         elif not isinstance(cats, list):
+            cats = list(DEFAULT_CATEGORIES)
+        if not cats:
             cats = list(DEFAULT_CATEGORIES)
     except:
         cats = list(DEFAULT_CATEGORIES)
