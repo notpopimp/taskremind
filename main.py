@@ -1124,6 +1124,37 @@ def check_reminders(request: Request):
 def health():
     return {"status": "ok"}
 
+# ---------- Test Notification ----------
+@app.post("/api/test-notification")
+def test_notification(request: Request):
+    """Send a test email/SMS to the current user."""
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT email, phone FROM users WHERE id = %s", (uid,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not user:
+        raise HTTPException(404, "User not found")
+    results = []
+    if user["email"] and SMTP_EMAIL and SMTP_PASSWORD:
+        if send_email(user["email"], "🧭 Waypoint Test Notification", "This is a test notification from Waypoint! Your email notifications are working correctly. 🎉"):
+            results.append("email sent")
+        else:
+            results.append("email failed")
+    else:
+        results.append("email skipped (no email set or SMTP not configured)")
+    if user["phone"] and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
+        try:
+            send_sms(user["phone"], "🧭 Waypoint test notification! SMS working. 🎉")
+            results.append("sms sent")
+        except:
+            results.append("sms failed")
+    else:
+        results.append("sms skipped (no phone set or Twilio not configured)")
+    return {"status": ", ".join(results)}
+
 # ---------- Export ----------
 @app.get("/api/export/{fmt}")
 def export_tasks(request: Request, fmt: str = "json"):
