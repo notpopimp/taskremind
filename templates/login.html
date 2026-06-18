@@ -39,7 +39,7 @@
             background: rgba(255,255,255,0.97);
             backdrop-filter: blur(20px);
             border-radius: 28px;
-            padding: 44px 32px 36px;
+            padding: 40px 28px 32px;
             width: 90%;
             max-width: 380px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3), 0 0 80px rgba(65,101,225,0.1);
@@ -50,15 +50,9 @@
             text-align: center;
             margin-bottom: 8px;
         }
-        .logo-icon {
-            font-size: 48px;
-            display: block;
-            margin-bottom: 8px;
-        }
+        .logo-icon { font-size: 48px; display: block; margin-bottom: 8px; }
         h1 {
-            font-size: 26px;
-            text-align: center;
-            font-weight: 700;
+            font-size: 26px; text-align: center; font-weight: 700;
             background: linear-gradient(135deg, #4165e1, #1a3a9e);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -66,59 +60,66 @@
             margin-bottom: 4px;
         }
         .sub {
-            text-align: center;
-            color: #98a2b3;
-            font-size: 13px;
-            margin-bottom: 28px;
-            line-height: 1.4;
+            text-align: center; color: #98a2b3; font-size: 13px;
+            margin-bottom: 24px; line-height: 1.4;
         }
-        .sub em {
-            font-style: italic;
-            color: #4165e1;
+        .sub em { font-style: italic; color: #4165e1; }
+
+        /* Person picker buttons */
+        .picker-label {
+            text-align: center; font-size: 13px; color: #98a2b3;
+            margin-bottom: 14px; letter-spacing: 0.5px;
         }
-        .divider {
-            text-align: center;
-            margin-bottom: 20px;
-            position: relative;
+        .person-grid {
+            display: flex; gap: 10px; margin-bottom: 22px;
         }
-        .divider::after {
-            content: '✧';
-            color: #4165e1;
-            font-size: 14px;
-            opacity: 0.4;
+        .person-btn {
+            flex: 1; padding: 14px 8px; border: 2px solid #e8ecf0;
+            border-radius: 16px; background: #f8f9fb; cursor: pointer;
+            text-align: center; transition: all 0.2s; outline: none;
         }
+        .person-btn:hover {
+            border-color: #4165e1; background: rgba(65,101,225,0.04);
+        }
+        .person-btn.selected {
+            border-color: #4165e1;
+            background: rgba(65,101,225,0.08);
+            box-shadow: 0 0 0 3px rgba(65,101,225,0.12);
+        }
+        .person-avatar {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: linear-gradient(135deg, #4165e1, #2a4fd6);
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 6px; font-size: 18px; font-weight: 700; color: white;
+        }
+        .person-btn:nth-child(2) .person-avatar {
+            background: linear-gradient(135deg, #e8526b, #d14059);
+        }
+        .person-btn:nth-child(3) .person-avatar {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+        }
+        .person-name { font-size: 14px; font-weight: 600; color: #1a1a2e; }
+
         input {
-            width: 100%;
-            padding: 14px 16px;
-            border: 2px solid #e8ecf0;
-            border-radius: 14px;
-            background: #f8f9fb;
-            color: #1a1a2e;
-            font-size: 16px;
-            margin-bottom: 12px;
-            outline: none;
+            width: 100%; padding: 14px 16px;
+            border: 2px solid #e8ecf0; border-radius: 14px;
+            background: #f8f9fb; color: #1a1a2e;
+            font-size: 16px; margin-bottom: 12px; outline: none;
             transition: all 0.2s;
         }
         input:focus {
-            border-color: #4165e1;
-            background: white;
+            border-color: #4165e1; background: white;
             box-shadow: 0 0 0 4px rgba(65,101,225,0.1);
         }
         input::placeholder { color: #b0b8c4; }
         .btn {
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 14px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
+            width: 100%; padding: 14px; border: none; border-radius: 14px;
+            font-size: 16px; font-weight: 600; cursor: pointer;
             transition: all 0.2s;
         }
         .btn-primary {
             background: linear-gradient(135deg, #4165e1, #2a4fd6);
-            color: white;
-            box-shadow: 0 4px 14px rgba(65,101,225,0.3);
+            color: white; box-shadow: 0 4px 14px rgba(65,101,225,0.3);
         }
         .btn-primary:hover {
             transform: translateY(-1px);
@@ -126,35 +127,17 @@
         }
         .btn-primary:active { transform: translateY(0); }
         .btn-primary:disabled { opacity: 0.6; transform: none; }
-        .btn-secondary {
-            background: transparent;
-            color: #4165e1;
-            border: 2px solid #4165e1;
-            margin-top: 10px;
-        }
-        .btn-secondary:hover { background: rgba(65,101,225,0.05); }
         .error {
-            color: #e53935;
-            font-size: 13px;
-            text-align: center;
-            margin-bottom: 12px;
-            min-height: 20px;
+            color: #e53935; font-size: 13px; text-align: center;
+            margin-bottom: 12px; min-height: 20px;
             background: rgba(229,57,53,0.08);
-            padding: 8px 12px;
-            border-radius: 10px;
-            display: none;
+            padding: 8px 12px; border-radius: 10px; display: none;
         }
         .error.show { display: block; }
-        .toggle { text-align: center; margin-top: 18px; font-size: 14px; color: #98a2b3; }
-        .toggle a { color: #4165e1; text-decoration: none; cursor: pointer; font-weight: 600; }
         .pin-input { letter-spacing: 6px; font-size: 20px; text-align: center; font-weight: 600; }
         .footer-text {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 11px;
-            color: rgba(255,255,255,0.3);
-            position: relative;
-            z-index: 1;
+            text-align: center; margin-top: 20px; font-size: 11px;
+            color: rgba(255,255,255,0.3); position: relative; z-index: 1;
         }
     </style>
 </head>
@@ -165,71 +148,95 @@
             <h1>Waypoint</h1>
         </div>
         <p class="sub">Life is a journey — <em>tasks are your checkpoints</em></p>
-        <div class="divider"></div>
+
+        <div class="picker-label">👤 Who's checking in?</div>
+        <div class="person-grid">
+            <button type="button" class="person-btn" data-user="Ben">
+                <div class="person-avatar">B</div>
+                <div class="person-name">Ben</div>
+            </button>
+            <button type="button" class="person-btn" data-user="Rachel">
+                <div class="person-avatar">R</div>
+                <div class="person-name">Rachel</div>
+            </button>
+            <button type="button" class="person-btn" data-user="Sam">
+                <div class="person-avatar">S</div>
+                <div class="person-name">Sam</div>
+            </button>
+        </div>
+
         <div class="error" id="error"></div>
         <form id="authForm">
-            <input type="text" id="username" placeholder="Username" autocomplete="username" required>
-            <input type="password" id="pin" class="pin-input" placeholder="PIN (4+ digits)" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="new-password" required>
-            <button type="submit" class="btn btn-primary" id="authBtn">Login</button>
+            <input type="hidden" id="username" value="">
+            <input type="password" id="pin" class="pin-input" placeholder="Enter PIN" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="current-password" required disabled>
+            <button type="submit" class="btn btn-primary" id="authBtn" disabled>Select someone first</button>
         </form>
-        <div class="toggle">
-            <span id="toggleText">Don't have an account?</span>
-            <a id="toggleLink">Register</a>
-        </div>
     </div>
     <div class="footer-text">Waypoint © 2026</div>
 
     <script>
-        let isLogin = true;
+        let selectedUser = null;
         const form = document.getElementById('authForm');
         const errorEl = document.getElementById('error');
         const authBtn = document.getElementById('authBtn');
-        const toggleLink = document.getElementById('toggleLink');
-        const toggleText = document.getElementById('toggleText');
+        const pinInput = document.getElementById('pin');
+        const usernameInput = document.getElementById('username');
+        const personBtns = document.querySelectorAll('.person-btn');
 
         function setError(msg) {
             errorEl.textContent = msg;
             errorEl.classList.toggle('show', !!msg);
         }
-        toggleLink.addEventListener('click', () => {
-            isLogin = !isLogin;
-            authBtn.textContent = isLogin ? 'Login' : 'Register';
-            toggleText.textContent = isLogin ? "Don't have an account?" : "Already have an account?";
-            toggleLink.textContent = isLogin ? 'Register' : 'Login';
-            setError('');
+
+        personBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                personBtns.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                selectedUser = btn.dataset.user;
+                usernameInput.value = selectedUser;
+                pinInput.disabled = false;
+                pinInput.focus();
+                authBtn.disabled = false;
+                authBtn.textContent = `Log in as ${selectedUser}`;
+                setError('');
+            });
         });
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const username = document.getElementById('username').value.trim();
-            const pin = document.getElementById('pin').value;
+            const username = usernameInput.value;
+            const pin = pinInput.value;
             if (!username || pin.length < 4) {
-                setError('Username and PIN (4+ digits) required');
+                setError('Select who you are and enter your PIN (4+ digits)');
                 return;
             }
             authBtn.disabled = true;
-            authBtn.textContent = 'Loading...';
+            authBtn.textContent = 'Checking...';
             setError('');
-
-            const endpoint = isLogin ? '/api/login' : '/api/register';
-            const data = JSON.stringify({ username, pin });
             try {
-                const res = await fetch(endpoint, {
+                const res = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: data
+                    body: JSON.stringify({ username, pin })
                 });
                 if (!res.ok) {
                     const msg = await res.text();
-                    throw new Error(msg.includes('taken') ? 'Username already taken' : msg.includes('Invalid') ? 'Invalid username or PIN' : 'Something went wrong');
+                    throw new Error('Invalid PIN. Try again.');
                 }
                 window.location.href = '/';
             } catch (err) {
                 setError(err.message);
+                pinInput.value = '';
+                pinInput.focus();
             } finally {
                 authBtn.disabled = false;
-                authBtn.textContent = isLogin ? 'Login' : 'Register';
+                authBtn.textContent = `Log in as ${selectedUser || '...'}`;
             }
+        });
+
+        // Enter key on PIN submits form
+        pinInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') form.dispatchEvent(new Event('submit'));
         });
     </script>
 </body>

@@ -162,6 +162,29 @@ def init_db():
     cur.close()
     conn.close()
 
+# ---------- Seed the 3 Waypoint users ----------
+SEED_USERS = {
+    "Ben":  {"pin": "0000", "role": "admin"},
+    "Rachel": {"pin": "0000", "role": "user"},
+    "Sam":   {"pin": "0000", "role": "user"},
+}
+
+def seed_users():
+    """Ensure Ben, Rachel, and Sam exist. Won't overwrite existing users."""
+    conn = get_db()
+    cur = conn.cursor()
+    for name, info in SEED_USERS.items():
+        cur.execute("SELECT id FROM users WHERE username = %s", (name,))
+        if not cur.fetchone():
+            user_id = uuid.uuid4().hex[:12]
+            cur.execute(
+                "INSERT INTO users (id, username, pin_hash, created_at, role) VALUES (%s, %s, %s, %s, %s)",
+                (user_id, name, hash_pin(info["pin"]), now_iso(), info["role"]),
+            )
+            print(f"  ✓ Seeded user: {name} ({info['role']})")
+    cur.close()
+    conn.close()
+
 # ---------- App Setup ----------
 app = FastAPI(title="Task Reminder App")
 
@@ -202,6 +225,7 @@ def startup():
     global db_ready
     try:
         init_db()
+        seed_users()
         db_ready = True
         print("Database OK")
     except Exception as e:
@@ -306,28 +330,7 @@ def login(body: LoginRequest):
 
 @app.post("/api/register")
 def register(body: RegisterRequest):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM users WHERE username = %s", (body.username,))
-    if cur.fetchone():
-        cur.close()
-        conn.close()
-        raise HTTPException(409, "Username already taken")
-    user_id = uuid.uuid4().hex[:12]
-    cur.execute("SELECT COUNT(*) AS cnt FROM users")
-    count = cur.fetchone()["cnt"]
-    role = "admin" if count == 0 else "user"
-    cur.execute(
-        "INSERT INTO users (id, username, pin_hash, created_at, role) VALUES (%s, %s, %s, %s, %s)",
-        (user_id, body.username, hash_pin(body.pin), now_iso(), role),
-    )
-    cur.close()
-    conn.close()
-    token = make_token()
-    SESSIONS[token] = user_id
-    resp = JSONResponse({"ok": True, "token": token, "user_id": user_id})
-    resp.set_cookie(key="session", value=token, httponly=True, max_age=86400*30)
-    return resp
+    raise HTTPException(403, "Registration is closed. Waypoint has 3 members: Ben, Rachel, and Sam.")
 
 @app.post("/api/logout")
 def logout():
@@ -399,10 +402,9 @@ def rename_user(request: Request, user_id: str, body: dict):
     uid = get_user(request)
     require_admin(uid)  # only admin can rename
     new_name = body.get("username", "").strip()
-    if not new_name:
-        raise HTTPException(400, "Username cannot be empty")
-    if len(new_name) > 50:
-        raise HTTPException(400, "Username too long (max 50)")
+    ALLOWED_NAMES = {"Ben", "Rachel", "Sam"}
+    if new_name not in ALLOWED_NAMES:
+        raise HTTPException(400, f"Name must be one of: {', '.join(sorted(ALLOWED_NAMES))}")
     conn = get_db()
     cur = conn.cursor()
     # Check name not taken
