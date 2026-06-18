@@ -382,6 +382,41 @@ def update_profile(request: Request, body: dict):
     conn.close()
     return {"ok": True}
 
+# ---------- User Management (admin only) ----------
+@app.get("/api/users")
+def list_users(request: Request):
+    uid = get_user(request)
+    require_admin(uid)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, username, created_at FROM users ORDER BY username ASC")
+    users = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return users
+
+@app.put("/api/users/{user_id}")
+def rename_user(request: Request, user_id: str, body: dict):
+    uid = get_user(request)
+    require_admin(uid)
+    new_name = body.get("username", "").strip()
+    if not new_name:
+        raise HTTPException(400, "Username cannot be empty")
+    if len(new_name) > 50:
+        raise HTTPException(400, "Username too long (max 50)")
+    conn = get_db()
+    cur = conn.cursor()
+    # Check name not taken
+    cur.execute("SELECT id FROM users WHERE username = %s AND id != %s", (new_name, user_id))
+    if cur.fetchone():
+        cur.close()
+        conn.close()
+        raise HTTPException(409, "Username already taken")
+    cur.execute("UPDATE users SET username = %s WHERE id = %s", (new_name, user_id))
+    cur.close()
+    conn.close()
+    return {"ok": True, "username": new_name}
+
 # ---------- User Categories ----------
 DEFAULT_CATEGORIES = ["Personal", "Work", "Chores", "Health", "Scheduled", "Time Off", "Call Offs"]
 
