@@ -540,6 +540,7 @@ def send_sms(to_phone: str, body: str) -> bool:
         print(f"SMS send error: {e}")
         return False
 
+@app.get("/api/cron/check-reminders")
 @app.post("/api/cron/check-reminders")
 def cron_check_reminders(request: Request):
     """Called by Railway cron: sends push notifications for due reminders."""
