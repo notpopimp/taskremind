@@ -382,11 +382,10 @@ def update_profile(request: Request, body: dict):
     conn.close()
     return {"ok": True}
 
-# ---------- User Management (admin only) ----------
+# ---------- User Management ----------
 @app.get("/api/users")
 def list_users(request: Request):
-    uid = get_user(request)
-    require_admin(uid)
+    uid = get_user(request)  # any logged-in user can list
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT id, username, created_at FROM users ORDER BY username ASC")
@@ -398,7 +397,7 @@ def list_users(request: Request):
 @app.put("/api/users/{user_id}")
 def rename_user(request: Request, user_id: str, body: dict):
     uid = get_user(request)
-    require_admin(uid)
+    require_admin(uid)  # only admin can rename
     new_name = body.get("username", "").strip()
     if not new_name:
         raise HTTPException(400, "Username cannot be empty")

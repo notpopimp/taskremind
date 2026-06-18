@@ -186,6 +186,27 @@
             background: #e8f5e9; border-color: #43a047; color: #1b5e20;
         }
         .status-badge.completed::before { content: '\2713\00a0'; font-weight: 700; }
+        .user-pill {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 5px 12px; border-radius: 16px; font-size: 12px; font-weight: 500;
+            cursor: pointer; border: 1.5px solid #d0d5dd;
+            background: white; color: #667788;
+            transition: all 0.15s; user-select: none;
+        }
+        .user-pill:hover { border-color: #4165e1; color: #4165e1; }
+        .user-pill.selected {
+            background: #4165e1; border-color: #4165e1; color: white;
+        }
+        .selected-tag {
+            display: inline-flex; align-items: center; gap: 3px;
+            padding: 3px 8px; border-radius: 12px;
+            background: #e8f5e9; color: #1b5e20; font-size: 11px; font-weight: 500;
+        }
+        .selected-tag .remove {
+            cursor: pointer; font-size: 13px; line-height: 1; margin-left: 2px;
+            opacity: 0.6;
+        }
+        .selected-tag .remove:hover { opacity: 1; }
 
         .task-priority {
             width: 4px; height: 36px; border-radius: 2px; flex-shrink: 0;
@@ -542,8 +563,10 @@
 <div class="modal-overlay" id="completeModal">
     <div class="modal-box">
         <h3>Mark Complete</h3>
-        <p>Who completed this task?</p>
-        <input type="text" id="completeByName" placeholder="Enter name..." maxlength="50">
+        <p>Who completed this task? Tap any or type a name.</p>
+        <div id="userPillList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;min-height:30px"></div>
+        <input type="text" id="completeByName" placeholder="Or type a name..." maxlength="50" style="width:100%;padding:10px 14px;border:1px solid #d0d5dd;border-radius:10px;font-size:14px;outline:none;margin-bottom:8px;box-sizing:border-box">
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px" id="selectedNamesPreview"></div>
         <div class="modal-actions">
             <button class="modal-cancel" onclick="closeCompleteModal()">Cancel</button>
             <button class="modal-confirm" onclick="confirmComplete()">Complete</button>
@@ -1037,6 +1060,9 @@ function setDueNextMonth() {
     document.getElementById('newTaskDue').value = d.toISOString().slice(0,16);
 }
 
+let cachedUsers = [];
+let selectedCompleters = new Set();
+
 /* Completion modal */
 function startComplete(id) {
     pendingCompleteId = id;
@@ -1048,21 +1074,88 @@ function startComplete(id) {
     }
     if (task && task.in_progress) {
         // In Progress → Completed (ask who)
+        selectedCompleters = new Set();
+        updateSelectedPreview();
         document.getElementById('completeByName').value = '';
         document.getElementById('completeModal').classList.add('show');
+        // Load user pills
+        loadUserPills();
         return;
     }
     // Pending → In Progress (no modal)
     api('POST', '/api/tasks/'+id+'/toggle', {}).then(()=>loadTasks());
 }
+
+// Enter key adds typed name to selection
+document.getElementById('completeByName').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        const name = this.value.trim();
+        if (name) {
+            selectedCompleters.add(name);
+            this.value = '';
+            updateSelectedPreview();
+        }
+    }
+});
+
+async function loadUserPills() {
+    try {
+        const users = await api('GET', '/api/users');
+        cachedUsers = users;
+        const container = document.getElementById('userPillList');
+        container.innerHTML = users.map((u, i) =>
+            '<span class="user-pill" data-idx="' + i + '" onclick="toggleUserPillByIndex(' + i + ',this)">' + esc(u.username) + '</span>'
+        ).join('');
+    } catch(e) {}
+}
+
+function toggleUserPillByIndex(idx, el) {
+    const name = cachedUsers[idx].username;
+    if (selectedCompleters.has(name)) {
+        selectedCompleters.delete(name);
+        el.classList.remove('selected');
+    } else {
+        selectedCompleters.add(name);
+        el.classList.add('selected');
+    }
+    updateSelectedPreview();
+}
+
+function updateSelectedPreview() {
+    const container = document.getElementById('selectedNamesPreview');
+    if (selectedCompleters.size === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = Array.from(selectedCompleters).map(n =>
+        '<span class="selected-tag">' + esc(n) + '<span class="remove" data-name="' + n.replace(/"/g,'&quot;') + '" onclick="removeCompleter(this)">✕</span></span>'
+    ).join('');
+}
+
+function removeCompleter(el) {
+    const name = el.dataset.name;
+    selectedCompleters.delete(name);
+    updateSelectedPreview();
+    // Deselect matching pill
+    document.querySelectorAll('.user-pill.selected').forEach(p => {
+        const idx = parseInt(p.dataset.idx);
+        if (!isNaN(idx) && cachedUsers[idx] && cachedUsers[idx].username === name) {
+            p.classList.remove('selected');
+        }
+    });
+}
+
 function closeCompleteModal() { document.getElementById('completeModal').classList.remove('show'); pendingCompleteId=null; }
+
 async function confirmComplete() {
-    const name = document.getElementById('completeByName').value.trim();
-    if (!name) return;
+    const textName = document.getElementById('completeByName').value.trim();
+    if (textName) selectedCompleters.add(textName);
+    if (selectedCompleters.size === 0) return;
+    const names = Array.from(selectedCompleters).join(', ');
     document.getElementById('completeModal').classList.remove('show');
     const id = pendingCompleteId;
     pendingCompleteId = null;
-    await api('POST', '/api/tasks/'+id+'/toggle', { completed_by: name });
+    await api('POST', '/api/tasks/'+id+'/toggle', { completed_by: names });
     await loadTasks();
 }
 
