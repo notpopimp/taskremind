@@ -901,6 +901,50 @@ def push_subs_count():
     cur.close()
     conn.close()
     return {"count": cnt}
+
+@app.get("/api/stats")
+def get_stats(request: Request):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    
+    now_str = datetime.utcnow().isoformat()
+    
+    # Current user stats
+    cur.execute(
+        "SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END), 0) as done FROM tasks WHERE user_id = %s",
+        (uid,),
+    )
+    user_stats = dict(cur.fetchone())
+    
+    # All users stats
+    cur.execute(
+        "SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END), 0) as done FROM tasks"
+    )
+    overall_stats = dict(cur.fetchone())
+    
+    # Per-user breakdown
+    cur.execute("""
+        SELECT u.username, u.id,
+               COUNT(t.id) as total,
+               COALESCE(SUM(CASE WHEN t.completed=1 THEN 1 ELSE 0 END), 0) as done,
+               COALESCE(SUM(CASE WHEN t.completed=0 AND t.due_at IS NOT NULL AND t.due_at < %s THEN 1 ELSE 0 END), 0) as overdue
+        FROM users u
+        LEFT JOIN tasks t ON t.user_id = u.id
+        GROUP BY u.id, u.username
+        ORDER BY u.username
+    """, (now_str,))
+    per_user = [dict(r) for r in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    return {
+        "user": user_stats,
+        "overall": overall_stats,
+        "per_user": per_user,
+    }
+
 @app.post("/api/shares")
 def create_share(request: Request, body: ShareRequest = None):
     if body is None:

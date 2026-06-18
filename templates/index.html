@@ -340,6 +340,38 @@
         }
         .snooze-menu div:hover { background: #f0f2f5; color: #4165e1; }
         .snooze-menu div:not(:last-child) { border-bottom: 1px solid #f0f2f5; }
+        /* Stats */
+        .stat-grid { display: grid; gap: 10px; margin-bottom: 14px; }
+        .stat-card {
+            background: #f8f9fc; border-radius: 10px; padding: 12px 14px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .stat-card .label { font-size: 13px; color: #667788; }
+        .stat-card .value { font-size: 18px; font-weight: 700; color: #1a1a2e; }
+        .stat-card .value .sub { font-size: 13px; font-weight: 400; color: #98a2b3; }
+        .stat-bar {
+            height: 6px; background: #e2e6ea; border-radius: 3px; margin-top: 6px; overflow: hidden;
+        }
+        .stat-bar-fill {
+            height: 100%; border-radius: 3px; background: linear-gradient(90deg, #43a047, #66bb6a);
+            transition: width 0.5s;
+        }
+        .stat-per-user {
+            border-top: 1px solid #e2e6ea; padding-top: 10px; margin-top: 4px;
+        }
+        .stat-per-user h4 { font-size: 13px; color: #667788; margin-bottom: 6px; }
+        .stat-user-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 6px 0; font-size: 13px;
+        }
+        .stat-user-row .name { color: #1a1a2e; font-weight: 500; }
+        .stat-user-row .pct { color: #4165e1; font-weight: 600; }
+        .stat-user-row .meta { color: #98a2b3; font-size: 11px; }
+        .stat-avatar {
+            display: inline-flex; width: 28px; height: 28px; border-radius: 50%;
+            background: #4165e1; color: white; font-size: 13px; font-weight: 600;
+            align-items: center; justify-content: center; margin-right: 8px; flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
@@ -347,6 +379,7 @@
     <h1>🧭 Waypoint</h1>
     <div class="header-actions">
         <button onclick="toggleSharePanel()">Share</button>
+        <button onclick="openStats()">📊 Stats</button>
         <button onclick="openSettings()">Settings</button>
         <button class="export-btn" onclick="toggleExport()">
             Export
@@ -511,6 +544,19 @@
             <button class="modal-confirm" onclick="saveSettings()">Save</button>
             <button onclick="testNotification()" style="margin-top:6px;padding:5px 12px;border:1px solid #4165e1;border-radius:6px;background:#eef2ff;color:#4165e1;font-size:12px;cursor:pointer;width:100%">📧 Test Email</button>
             <button onclick="testSms()" style="margin-top:6px;padding:5px 12px;border:1px solid #4165e1;border-radius:6px;background:#eef2ff;color:#4165e1;font-size:12px;cursor:pointer;width:100%">💬 Test SMS</button>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Modal -->
+<div class="modal-overlay" id="statsModal">
+    <div class="modal-box" style="max-width:400px;text-align:left">
+        <h3 style="margin-bottom:14px">📊 Completion Stats</h3>
+        <div id="statsContent">
+            <div style="text-align:center;color:#98a2b3;padding:20px">Loading...</div>
+        </div>
+        <div class="modal-actions" style="margin-top:12px">
+            <button class="modal-confirm" onclick="closeStats()" style="width:100%">Close</button>
         </div>
     </div>
 </div>
@@ -1272,6 +1318,61 @@ async function snoozeTask(id, hours, event) {
     await loadTasks();
     showToast('Snoozed ' + (hours < 1 ? '5 min' : hours === 24 ? '1 day' : '1 hour'));
 }
+
+/* Stats */
+function openStats() {
+    document.getElementById('statsModal').classList.add('show');
+    loadStats();
+}
+function closeStats() { document.getElementById('statsModal').classList.remove('show'); }
+
+async function loadStats() {
+    try {
+        const data = await api('GET', '/api/stats');
+        const user = data.user;
+        const overall = data.overall;
+        const perUser = data.per_user;
+
+        function pct(done, total) {
+            if (total === 0) return 0;
+            return Math.round((done / total) * 100);
+        }
+
+        const uPct = pct(user.done, user.total);
+        const oPct = pct(overall.done, overall.total);
+
+        let html = '<div class="stat-grid">';
+
+        // Your stats
+        html += '<div class="stat-card"><div><div class="label">Your tasks</div><div class="value">' + uPct + '%<span class="sub"> (' + user.done + '/' + user.total + ')</span></div></div></div>';
+        html += '<div class="stat-bar"><div class="stat-bar-fill" style="width:' + uPct + '%"></div></div>';
+
+        // Overall
+        html += '<div class="stat-card" style="margin-top:4px"><div><div class="label">Overall</div><div class="value">' + oPct + '%<span class="sub"> (' + overall.done + '/' + overall.total + ')</span></div></div></div>';
+        html += '<div class="stat-bar"><div class="stat-bar-fill" style="width:' + oPct + '%"></div></div>';
+
+        // Per-user breakdown
+        if (perUser.length > 1) {
+            html += '<div class="stat-per-user"><h4>Per person</h4>';
+            perUser.forEach(u => {
+                const up = pct(u.done, u.total);
+                const initial = (u.username || '?')[0].toUpperCase();
+                const odLabel = u.overdue > 0 ? ' <span style="color:#e53935">⚠ ' + u.overdue + ' overdue</span>' : '';
+                html += '<div class="stat-user-row">' +
+                    '<div><span class="stat-avatar">' + initial + '</span><span class="name">' + esc(u.username) + '</span></div>' +
+                    '<div><span class="pct">' + up + '%</span> <span class="meta">(' + u.done + '/' + u.total + odLabel + ')</span></div>' +
+                    '</div>';
+            });
+            html += '</div>';
+        }
+
+        html += '</div>';
+        document.getElementById('statsContent').innerHTML = html;
+    } catch(e) {
+        document.getElementById('statsContent').innerHTML = '<div style="text-align:center;color:#e53935;padding:20px">Failed to load stats</div>';
+    }
+}
+
 document.addEventListener('click', function(e) {
     if (!e.target.closest('.snooze-wrap')) {
         document.querySelectorAll('.snooze-menu.show').forEach(m => m.classList.remove('show'));
