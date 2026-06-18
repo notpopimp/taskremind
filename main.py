@@ -656,7 +656,7 @@ def cron_check_reminders(request: Request):
                 "body": "\n".join(lines),
             }
 
-            text_body = "\n".join(lines)
+            text_body = "\n".join(lines) + "\n\n— Waypoint (life is a journey — tasks are your checkpoints)\nYou opted in for task reminders. Reply STOP to opt out."
 
             cur.execute(
                 "SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = %s",
@@ -693,7 +693,9 @@ def cron_check_reminders(request: Request):
                     email_sent += 1
 
             if u["phone"] and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
-                sms_body = text_body[:160] if len(text_body) > 160 else text_body
+                sms_body = "\n".join(lines)[:140]
+                if len(sms_body) > 100:
+                    sms_body += "\n-Waypoint (opt-in)"
                 if send_sms(u["phone"], sms_body):
                     sms_sent += 1
 
@@ -1142,7 +1144,7 @@ def test_notification(request: Request):
         raise HTTPException(404, "User not found")
     results = []
     if user["email"] and SENDGRID_API_KEY:
-        ok, err = send_email(user["email"], "🧭 Waypoint Test Notification", "This is a test notification from Waypoint! Your email notifications are working correctly. 🎉")
+        ok, err = send_email(user["email"], "🧭 Waypoint Test Notification", "This is a test notification from Waypoint! You opted in for task reminders in Waypoint. If this wasn't you, ignore this message.\n\n— Waypoint")
         if ok:
             results.append("email sent")
         else:
@@ -1150,7 +1152,7 @@ def test_notification(request: Request):
     else:
         results.append("email skipped (no email set or SendGrid not configured)")
     if user["phone"] and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
-        if send_sms(user["phone"], "🧭 Waypoint test notification! SMS working. 🎉"):
+        if send_sms(user["phone"], "🧭 Waypoint test! You opted in for task reminders."):
             results.append("sms sent")
         else:
             results.append("sms failed")
