@@ -324,6 +324,28 @@ function renderTasks() {
     if (!tasks.length) { list.innerHTML = '<div class="empty">No tasks yet</div>'; return; }
     const now = new Date().toISOString();
     list.innerHTML = tasks.map(t => {
+        // Reminders: simple display in shared view
+        if (t.is_reminder) {
+            let rangeStr = '';
+            if (t.start_at) {
+                try { rangeStr = new Date(t.start_at.slice(0,10)).toLocaleDateString(); } catch(e) { rangeStr = t.start_at.slice(0,10); }
+                if (t.end_at && t.end_at !== t.start_at) {
+                    try { rangeStr += ' - ' + new Date(t.end_at.slice(0,10)).toLocaleDateString(); } catch(e) { rangeStr += ' - ' + t.end_at.slice(0,10); }
+                }
+            }
+            const cl = t.category && cats.includes(t.category) ? t.category : '';
+            return '<div class="task-item">' +
+                '<div class="task-priority"></div>' +
+                '<div class="task-info">' +
+                    '<div class="task-title">🔔 ' + esc(t.title) + '</div>' +
+                    (t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : '') +
+                    (rangeStr ? '<div class="task-due">' + rangeStr + '</div>' : '') +
+                    '<div class="task-meta">' +
+                        (cl ? '<span class="tag cat">' + esc(cl) + '</span>' : '') +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }
         const isInProgress = t.in_progress && !t.completed;
         const od = !t.completed && !t.in_progress && t.due_at && t.due_at < now;
         const ipOd = isInProgress && t.due_at && t.due_at < now;

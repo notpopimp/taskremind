@@ -808,6 +808,34 @@ function renderTasks() {
     const labels = { none:'', daily:'Daily', weekly:'Weekly', biweekly:'Biweekly', monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly' };
 
     function renderTaskItem(t) {
+        // Reminders: simple info display, no status
+        if (t.is_reminder) {
+            let rangeStr = '';
+            if (t.start_at) {
+                try { rangeStr = new Date(t.start_at.slice(0,10)).toLocaleDateString(); } catch(e) { rangeStr = t.start_at.slice(0,10); }
+                if (t.end_at && t.end_at !== t.start_at) {
+                    try { rangeStr += ' - ' + new Date(t.end_at.slice(0,10)).toLocaleDateString(); } catch(e) { rangeStr += ' - ' + t.end_at.slice(0,10); }
+                }
+            }
+            const catLabel = t.category && userCats.includes(t.category) ? t.category : '';
+            return '<div class="task-item">' +
+                '<div class="task-priority"></div>' +
+                '<div class="task-info">' +
+                    '<div class="task-title">🔔 ' + esc(t.title) + '</div>' +
+                    (t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : '') +
+                    (rangeStr ? '<div class="task-due">' + rangeStr + '</div>' : '') +
+                    '<div class="task-meta">' +
+                        (catLabel ? '<span class="tag cat">' + esc(catLabel) + '</span>' : '') +
+                    '</div>' +
+                '</div>' +
+                '<div class="task-actions">' +
+                    '<button onclick="openEditTask(\'' + t.id + '\')">Edit</button>' +
+                    '<button class="delete" onclick="deleteTask(\'' + t.id + '\')">X</button>' +
+                '</div>' +
+            '</div>';
+        }
+
+        // Tasks: full status badge, snooze, etc.
         const isInProgress = t.in_progress && !t.completed;
         const isOverdue = !t.completed && !t.in_progress && t.due_at && t.due_at < now;
         const ipOverdue = isInProgress && t.due_at && t.due_at < now;
