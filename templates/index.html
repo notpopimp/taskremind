@@ -145,7 +145,17 @@
         .task-item:hover { border-color: #d0d5dd; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
         .task-item.completed { opacity: 0.5; }
         .task-item.completed .task-title { text-decoration: line-through; color: #98a2b3; }
+        .task-item.in-progress { border-color: #fb8c00; border-left: 3px solid #fb8c00; background: #fffbf0; }
         .task-item.overdue { border-color: #e53935; border-left: 3px solid #e53935; background: #fff8f8; }
+        .task-item.in-progress.overdue { border-left: 3px solid #e53935; background: #fff8f8; }
+        .task-check.in-progress {
+            border-color: #fb8c00; background: rgba(251,140,0,0.15);
+            position: relative;
+        }
+        .task-check.in-progress::after {
+            content: ''; position: absolute; inset: 3px;
+            border-radius: 50%; background: #fb8c00; opacity: 0.6;
+        }
 
         .task-priority {
             width: 4px; height: 36px; border-radius: 2px; flex-shrink: 0;
@@ -459,6 +469,7 @@
     <div class="tabs">
         <button class="tab active" onclick="switchTab('all',this)">All</button>
         <button class="tab" onclick="switchTab('active',this)">Active</button>
+        <button class="tab" onclick="switchTab('in_progress',this)">In Progress</button>
         <button class="tab" onclick="switchTab('overdue',this)">Overdue</button>
         <button class="tab" onclick="switchTab('done',this)">Done</button>
     </div>
@@ -700,11 +711,12 @@ function renderTasks() {
     const q = document.getElementById('searchInput').value.toLowerCase().trim();
     let filtered = tasks;
     if (q) filtered = filtered.filter(t => t.title.toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q));
-    if (currentTab==='active') filtered = filtered.filter(t => !t.completed);
+    if (currentTab==='active') filtered = filtered.filter(t => !t.completed && !t.in_progress);
     else if (currentTab==='overdue') {
         const now = new Date().toISOString();
-        filtered = filtered.filter(t => !t.completed && t.due_at && t.due_at < now);
+        filtered = filtered.filter(t => !t.completed && !t.in_progress && t.due_at && t.due_at < now);
     }
+    else if (currentTab==='in_progress') filtered = filtered.filter(t => t.in_progress && !t.completed);
     else if (currentTab==='done') filtered = filtered.filter(t => t.completed);
     if (currentWaypoint) filtered = filtered.filter(t => t.category === currentWaypoint);
 
@@ -717,7 +729,9 @@ function renderTasks() {
     const labels = { none:'', daily:'Daily', weekly:'Weekly', biweekly:'Biweekly', monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly' };
 
     list.innerHTML = filtered.map(t => {
-        const isOverdue = !t.completed && t.due_at && t.due_at < now;
+        const isInProgress = t.in_progress && !t.completed;
+        const isOverdue = !t.completed && !t.in_progress && t.due_at && t.due_at < now;
+        const ipOverdue = isInProgress && t.due_at && t.due_at < now;
         let timeStr = '';
         if (t.due_at) {
             try { const d = new Date(t.due_at.endsWith('Z') ? t.due_at : t.due_at+'Z'); timeStr = d.toLocaleString(); }
@@ -726,13 +740,24 @@ function renderTasks() {
         const recLabel = t.recurrence && t.recurrence!=='none' ? labels[t.recurrence]||'' : '';
         const catLabel = t.category && userCats.includes(t.category) ? t.category : '';
         const doneBy = t.completed_by ? t.completed_by : '';
-        return '<div class="task-item'+(t.completed?' completed':'')+(isOverdue?' overdue':'')+'">'+
-            '<div class="task-priority '+(t.priority||'medium')+'"></div>'+
-            '<div class="task-check'+(t.completed?' done':'')+'" onclick="startComplete(\''+t.id+'\')"></div>'+
-            '<div class="task-info">'+
-                '<div class="task-title">'+esc(t.title)+'</div>'+
-                (t.description ? '<div class="task-desc">'+esc(t.description)+'</div>' : '')+
-                (t.due_at ? '<div class="task-due'+(isOverdue?' urgent':'')+'">'+timeStr+(isOverdue?' OVERDUE':'')+'</div>' : '')+
+        let itemClass = 'task-item';
+        if (t.completed) itemClass += ' completed';
+        if (isInProgress) itemClass += ' in-progress';
+        if (isOverdue || ipOverdue) itemClass += ' overdue';
+        let checkClass = 'task-check';
+        if (t.completed) checkClass += ' done';
+        if (isInProgress) checkClass += ' in-progress';
+        let dueLabel = '';
+        if (t.due_at) {
+            if (isOverdue || ipOverdue) dueLabel = ' OVERDUE';
+        }
+        return '<div class="' + itemClass + '">' +
+            '<div class="task-priority ' + (t.priority || 'medium') + '"></div>' +
+            '<div class="' + checkClass + '" onclick="startComplete(\'' + t.id + '\')"></div>' +
+            '<div class="task-info">' +
+                '<div class="task-title">' + esc(t.title) + '</div>' +
+                (t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : '') +
+                (t.due_at ? '<div class="task-due' + ((isOverdue || ipOverdue) ? ' urgent' : '') + '">' + timeStr + dueLabel + '</div>' : '') +
                 '<div class="task-meta">'+
                     (recLabel ? '<span class="tag recur">'+recLabel+'</span>' : '')+
                     (catLabel ? '<span class="tag cat">'+catLabel+'</span>' : '')+
@@ -968,11 +993,18 @@ function startComplete(id) {
     pendingCompleteId = id;
     const task = tasks.find(t=>t.id===id);
     if (task && task.completed) {
+        // Completed → Pending
         api('POST', '/api/tasks/'+id+'/toggle', {}).then(()=>loadTasks());
         return;
     }
-    document.getElementById('completeByName').value = '';
-    document.getElementById('completeModal').classList.add('show');
+    if (task && task.in_progress) {
+        // In Progress → Completed (ask who)
+        document.getElementById('completeByName').value = '';
+        document.getElementById('completeModal').classList.add('show');
+        return;
+    }
+    // Pending → In Progress (no modal)
+    api('POST', '/api/tasks/'+id+'/toggle', {}).then(()=>loadTasks());
 }
 function closeCompleteModal() { document.getElementById('completeModal').classList.remove('show'); pendingCompleteId=null; }
 async function confirmComplete() {

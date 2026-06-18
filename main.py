@@ -105,7 +105,7 @@ def init_db():
                        ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''"),
                        ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL"),
                        ("start_at", "TEXT DEFAULT NULL"), ("remind_before", "INTEGER DEFAULT 0"),
-                       ("last_reminded_at", "TEXT DEFAULT NULL")]:
+                       ("last_reminded_at", "TEXT DEFAULT NULL"), ("in_progress", "INTEGER DEFAULT 0")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='tasks' AND column_name='{col}'
@@ -712,7 +712,7 @@ def list_tasks(request: Request):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "SELECT * FROM tasks WHERE user_id = %s ORDER BY completed ASC, due_at ASC",
+        "SELECT *, CASE WHEN in_progress=1 THEN 0 WHEN completed=0 THEN 1 ELSE 2 END as sort_order FROM tasks WHERE user_id = %s ORDER BY sort_order ASC, due_at ASC",
         (uid,),
     )
     rows = cur.fetchall()
@@ -727,7 +727,7 @@ def create_task(request: Request, body: TaskCreate):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at, is_reminder, end_at, start_at, remind_before) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, in_progress, priority, category, recurrence, created_at, is_reminder, end_at, start_at, remind_before) VALUES (%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
         (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now_iso(), int(body.is_reminder), body.end_at or None, body.start_at or None, body.remind_before),
     )
     task = cur.fetchone()
@@ -746,27 +746,38 @@ def toggle_task(request: Request, task_id: str, body: TaskToggle = None):
         cur.close()
         conn.close()
         raise HTTPException(404, "Task not found")
-    new_val = 0 if task["completed"] else 1
-    completed_by = ""
-    if new_val == 1 and body and body.completed_by:
-        completed_by = body.completed_by
-    cur.execute(
-        "UPDATE tasks SET completed = %s, completed_by = %s WHERE id = %s",
-        (new_val, completed_by, task_id),
-    )
+    
+    cur_status = "in_progress" if task.get("in_progress") else ("completed" if task["completed"] else "pending")
+    
+    if cur_status == "pending":
+        # Pending → In Progress
+        cur.execute("UPDATE tasks SET in_progress = 1, completed = 0, completed_by = '' WHERE id = %s", (task_id,))
+        new_status = "in_progress"
+    elif cur_status == "in_progress":
+        # In Progress → Completed
+        completed_by = ""
+        if body and body.completed_by:
+            completed_by = body.completed_by
+        cur.execute("UPDATE tasks SET in_progress = 0, completed = 1, completed_by = %s WHERE id = %s", (completed_by, task_id))
+        new_status = "completed"
+    else:
+        # Completed → Pending
+        cur.execute("UPDATE tasks SET completed = 0, in_progress = 0, completed_by = '' WHERE id = %s", (task_id,))
+        new_status = "pending"
+    
     # Recurring: create next occurrence
     next_id = None
-    if new_val == 1 and task["recurrence"] not in (None, "none", ""):
+    if new_status == "completed" and task["recurrence"] not in (None, "none", ""):
         next_due = next_recurrence(task["due_at"], task["recurrence"])
         if next_due:
             next_id = uuid.uuid4().hex[:12]
             cur.execute(
-                "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s)",
-                (next_id, uid, task["title"], task["description"], next_due, task.get("priority","medium"), task.get("category",""), task["recurrence"], now_iso()),
+                "INSERT INTO tasks (id, user_id, title, description, due_at, completed, in_progress, priority, category, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s)",
+                (next_id, uid, task["title"], task["description"], next_due, task.get("priority", "medium"), task.get("category", ""), task["recurrence"], now_iso()),
             )
     cur.close()
     conn.close()
-    return {"ok": True, "completed": bool(new_val), "next_id": next_id}
+    return {"ok": True, "status": new_status, "next_id": next_id}
 
 @app.delete("/api/tasks/{task_id}")
 def delete_task(request: Request, task_id: str):
@@ -996,7 +1007,7 @@ def shared_view(request: Request, share_id: str):
         conn.close()
         return HTMLResponse("Not found", status_code=404)
     cur.execute(
-        "SELECT * FROM tasks WHERE user_id = %s ORDER BY completed ASC, due_at ASC",
+        "SELECT *, CASE WHEN in_progress=1 THEN 0 WHEN completed=0 THEN 1 ELSE 2 END as sort_order FROM tasks WHERE user_id = %s ORDER BY sort_order ASC, due_at ASC",
         (share["user_id"],),
     )
     tasks = cur.fetchall()
@@ -1014,16 +1025,11 @@ def shared_view(request: Request, share_id: str):
 
 @app.get("/api/shared/{share_id}/tasks")
 def get_shared_tasks(share_id: str):
+    share = _get_share_or_404(share_id)
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM shares WHERE id = %s", (share_id,))
-    share = cur.fetchone()
-    if not share:
-        cur.close()
-        conn.close()
-        raise HTTPException(404, "Share not found")
     cur.execute(
-        "SELECT * FROM tasks WHERE user_id = %s ORDER BY completed ASC, due_at ASC",
+        "SELECT *, CASE WHEN in_progress=1 THEN 0 WHEN completed=0 THEN 1 ELSE 2 END as sort_order FROM tasks WHERE user_id = %s ORDER BY sort_order ASC, due_at ASC",
         (share["user_id"],),
     )
     tasks = cur.fetchall()
@@ -1051,11 +1057,18 @@ def toggle_shared_task(share_id: str, task_id: str):
         cur.close()
         conn.close()
         raise HTTPException(404, "Task not found")
-    new_val = 0 if task["completed"] else 1
-    cur.execute("UPDATE tasks SET completed = %s WHERE id = %s", (new_val, task_id))
+    if task.get("in_progress"):
+        # In Progress → Completed
+        cur.execute("UPDATE tasks SET in_progress = 0, completed = 1 WHERE id = %s", (task_id,))
+    elif task["completed"]:
+        # Completed → Pending
+        cur.execute("UPDATE tasks SET completed = 0, in_progress = 0 WHERE id = %s", (task_id,))
+    else:
+        # Pending → In Progress
+        cur.execute("UPDATE tasks SET in_progress = 1, completed = 0 WHERE id = %s", (task_id,))
     cur.close()
     conn.close()
-    return {"ok": True, "completed": bool(new_val)}
+    return {"ok": True}
 
 def _get_share_or_404(share_id):
     """Helper: fetch share row or raise 404."""

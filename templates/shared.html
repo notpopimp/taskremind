@@ -50,6 +50,7 @@
         }
         .task-item.completed { opacity: 0.55; }
         .task-item.completed .task-title { text-decoration: line-through; }
+        .task-item.in-progress { border-color: #fb8c00; border-left: 3px solid #fb8c00; background: #fffbf0; }
         .task-check {
             width: 24px; height: 24px; border-radius: 50%;
             border: 2px solid #4165e1; cursor: pointer; flex-shrink: 0;
@@ -57,6 +58,13 @@
         }
         .task-check.done { background: #4165e1; }
         .task-check.done::after { content: '✓'; color: white; font-weight: bold; }
+        .task-check.in-progress {
+            border-color: #fb8c00; background: rgba(251,140,0,0.15); position: relative;
+        }
+        .task-check.in-progress::after {
+            content: ''; position: absolute; inset: 3px;
+            border-radius: 50%; background: #fb8c00; opacity: 0.6;
+        }
         .task-info { flex: 1; min-width: 0; }
         .task-title { font-size: 15px; font-weight: 500; }
         .task-desc { font-size: 12px; color: #667788; margin-top: 2px; }
@@ -306,15 +314,24 @@ function renderTasks() {
     if (!tasks.length) { list.innerHTML = '<div class="empty">No tasks yet</div>'; return; }
     const now = new Date().toISOString();
     list.innerHTML = tasks.map(t => {
-        const od = !t.completed && t.due_at && t.due_at < now;
+        const isInProgress = t.in_progress && !t.completed;
+        const od = !t.completed && !t.in_progress && t.due_at && t.due_at < now;
+        const ipOd = isInProgress && t.due_at && t.due_at < now;
         let ts = '';
         if (t.due_at) { try { ts = new Date(t.due_at.endsWith('Z')?t.due_at:t.due_at+'Z').toLocaleString(); } catch(e) { ts = t.due_at; } }
         const rl = t.recurrence && t.recurrence!=='none' ? LABELS[t.recurrence]||'' : '';
         const cl = t.category && cats.includes(t.category) ? t.category : '';
-        return '<div class="task-item'+(t.completed?' completed':'')+(od?' overdue':'')+'">'+
-            '<div class="task-priority '+(t.priority||'medium')+'"></div>'+
-            '<div class="task-check'+(t.completed?' done':'')+'" onclick="toggleTask(\''+t.id+'\')"></div>'+
-            '<div class="task-info">'+
+        let itemClass = 'task-item';
+        if (t.completed) itemClass += ' completed';
+        if (isInProgress) itemClass += ' in-progress';
+        if (od || ipOd) itemClass += ' overdue';
+        let checkClass = 'task-check';
+        if (t.completed) checkClass += ' done';
+        if (isInProgress) checkClass += ' in-progress';
+        return '<div class="' + itemClass + '">' +
+            '<div class="task-priority ' + (t.priority || 'medium') + '"></div>' +
+            '<div class="' + checkClass + '" onclick="toggleTask(\'' + t.id + '\')"></div>' +
+            '<div class="task-info">' +
                 '<div class="task-title">'+esc(t.title)+'</div>'+
                 (t.description ? '<div class="task-desc">'+esc(t.description)+'</div>' : '')+
                 (t.due_at ? '<div class="task-due'+(od?' urgent':'')+'">'+ts+(od?' OVERDUE':'')+'</div>' : '')+
