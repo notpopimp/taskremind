@@ -51,6 +51,23 @@
         .task-item.completed { opacity: 0.55; }
         .task-item.completed .task-title { text-decoration: line-through; }
         .task-item.in-progress { border-color: #fb8c00; border-left: 3px solid #fb8c00; background: #fffbf0; }
+        .status-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 8px; border-radius: 5px; font-size: 11px; font-weight: 500;
+            cursor: pointer; border: 1px solid; flex-shrink: 0;
+            transition: all 0.15s; user-select: none;
+        }
+        .status-badge:hover { filter: brightness(0.95); }
+        .status-badge.pending {
+            background: #f0f2f5; border-color: #d0d5dd; color: #667788;
+        }
+        .status-badge.in_progress {
+            background: #fff3e0; border-color: #fb8c00; color: #e65100;
+        }
+        .status-badge.completed {
+            background: #e8f5e9; border-color: #43a047; color: #1b5e20;
+        }
+        .status-badge.completed::before { content: '\2713\00a0'; font-weight: 700; }
         .task-check {
             width: 24px; height: 24px; border-radius: 50%;
             border: 2px solid #4165e1; cursor: pointer; flex-shrink: 0;
@@ -58,13 +75,6 @@
         }
         .task-check.done { background: #4165e1; }
         .task-check.done::after { content: '✓'; color: white; font-weight: bold; }
-        .task-check.in-progress {
-            border-color: #fb8c00; background: rgba(251,140,0,0.15); position: relative;
-        }
-        .task-check.in-progress::after {
-            content: ''; position: absolute; inset: 3px;
-            border-radius: 50%; background: #fb8c00; opacity: 0.6;
-        }
         .task-info { flex: 1; min-width: 0; }
         .task-title { font-size: 15px; font-weight: 500; }
         .task-desc { font-size: 12px; color: #667788; margin-top: 2px; }
@@ -325,12 +335,13 @@ function renderTasks() {
         if (t.completed) itemClass += ' completed';
         if (isInProgress) itemClass += ' in-progress';
         if (od || ipOd) itemClass += ' overdue';
-        let checkClass = 'task-check';
-        if (t.completed) checkClass += ' done';
-        if (isInProgress) checkClass += ' in-progress';
+        let statusLabel = 'Pending';
+        let statusClass = 'pending';
+        if (t.completed) { statusLabel = 'Completed'; statusClass = 'completed'; }
+        else if (isInProgress) { statusLabel = 'In Progress'; statusClass = 'in_progress'; }
         return '<div class="' + itemClass + '">' +
             '<div class="task-priority ' + (t.priority || 'medium') + '"></div>' +
-            '<div class="' + checkClass + '" onclick="toggleTask(\'' + t.id + '\')"></div>' +
+            '<div class="status-badge ' + statusClass + '" onclick="toggleTask(\'' + t.id + '\')">' + statusLabel + '</div>' +
             '<div class="task-info">' +
                 '<div class="task-title">'+esc(t.title)+'</div>'+
                 (t.description ? '<div class="task-desc">'+esc(t.description)+'</div>' : '')+
