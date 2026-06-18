@@ -24,7 +24,7 @@ class RegisterRequest(BaseModel):
     pin: str
 
 class ExtendRequest(BaseModel):
-    hours: int = 1
+    hours: float = 1.0
 
 class ShareRequest(BaseModel):
     permission: str = "view"

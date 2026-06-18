@@ -326,6 +326,20 @@
             font-size: 14px; font-weight: 500; display: none; z-index: 100;
         }
         .copy-toast.show { display: block; }
+        .snooze-wrap { position: relative; display: inline-block; }
+        .snooze-menu {
+            display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 4px;
+            background: white; border: 1px solid #d0d5dd; border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 50; overflow: hidden;
+            min-width: 130px;
+        }
+        .snooze-menu.show { display: block; }
+        .snooze-menu div {
+            padding: 10px 16px; font-size: 13px; color: #1a1a2e; cursor: pointer;
+            white-space: nowrap; transition: background 0.1s;
+        }
+        .snooze-menu div:hover { background: #f0f2f5; color: #4165e1; }
+        .snooze-menu div:not(:last-child) { border-bottom: 1px solid #f0f2f5; }
     </style>
 </head>
 <body>
@@ -680,7 +694,17 @@ function renderTasks() {
                 '</div>'+
             '</div>'+
             '<div class="task-actions">'+
-                (t.due_at&&!t.completed ? '<button onclick="extendTask(\''+t.id+'\')">+1h</button>' : '')+
+                (t.due_at&&!t.completed ?
+                    (isOverdue ?
+                        '<div class="snooze-wrap">' +
+                            '<button onclick="toggleSnooze(\''+t.id+'\',event)">Snooze</button>' +
+                            '<div class="snooze-menu" id="snooze-'+t.id+'">' +
+                                '<div onclick="snoozeTask(\''+t.id+'\',0.0833,event)">5 minutes</div>' +
+                                '<div onclick="snoozeTask(\''+t.id+'\',1,event)">1 hour</div>' +
+                                '<div onclick="snoozeTask(\''+t.id+'\',24,event)">1 day</div>' +
+                            '</div>' +
+                        '</div>' :
+                        '<button onclick="extendTask(\''+t.id+'\')">+1h</button>') : '') +
                 (currentUser&&currentUser.role==='admin' ? '<button onclick="openEditTask(\''+t.id+'\')">Edit</button><button class="delete" onclick="deleteTask(\''+t.id+'\')">X</button>' : '')+
             '</div>'+
         '</div>';
@@ -1232,6 +1256,27 @@ async function promoteToAdmin() {
     showToast('You are now admin!');
     renderTasks();
 }
+
+/* Snooze */
+function toggleSnooze(id, event) {
+    event.stopPropagation();
+    document.querySelectorAll('.snooze-menu.show').forEach(m => {
+        if (m.id !== 'snooze-'+id) m.classList.remove('show');
+    });
+    document.getElementById('snooze-'+id).classList.toggle('show');
+}
+async function snoozeTask(id, hours, event) {
+    event.stopPropagation();
+    document.getElementById('snooze-'+id).classList.remove('show');
+    await api('POST', '/api/tasks/'+id+'/extend', { hours });
+    await loadTasks();
+    showToast('Snoozed ' + (hours < 1 ? '5 min' : hours === 24 ? '1 day' : '1 hour'));
+}
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.snooze-wrap')) {
+        document.querySelectorAll('.snooze-menu.show').forEach(m => m.classList.remove('show'));
+    }
+});
 
 function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
 function logout() { fetch('/api/logout',{method:'POST'}).then(()=>window.location.href='/'); }
