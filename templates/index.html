@@ -164,6 +164,11 @@
             content: ''; position: absolute; inset: 3px;
             border-radius: 50%; background: #fb8c00; opacity: 0.6;
         }
+        .section-header {
+            font-size: 13px; font-weight: 600; color: #98a2b3;
+            padding: 10px 0 4px 2px; margin-top: 4px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
         .status-badge {
             display: inline-flex; align-items: center; gap: 4px;
             padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500;
@@ -753,7 +758,7 @@ function renderTasks() {
     const now = new Date().toISOString();
     const labels = { none:'', daily:'Daily', weekly:'Weekly', biweekly:'Biweekly', monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly' };
 
-    list.innerHTML = filtered.map(t => {
+    function renderTaskItem(t) {
         const isInProgress = t.in_progress && !t.completed;
         const isOverdue = !t.completed && !t.in_progress && t.due_at && t.due_at < now;
         const ipOverdue = isInProgress && t.due_at && t.due_at < now;
@@ -769,9 +774,6 @@ function renderTasks() {
         if (t.completed) itemClass += ' completed';
         if (isInProgress) itemClass += ' in-progress';
         if (isOverdue || ipOverdue) itemClass += ' overdue';
-        let checkClass = 'task-check';
-        if (t.completed) checkClass += ' done';
-        if (isInProgress) checkClass += ' in-progress';
         let dueLabel = '';
         if (t.due_at) {
             if (isOverdue || ipOverdue) dueLabel = ' OVERDUE';
@@ -795,7 +797,7 @@ function renderTasks() {
             '</div>'+
             '<div class="task-actions">'+
                 (t.due_at&&!t.completed ?
-                    (isOverdue ?
+                    (isOverdue || ipOverdue ?
                         '<div class="snooze-wrap">' +
                             '<button onclick="toggleSnooze(\''+t.id+'\',event)">Snooze</button>' +
                             '<div class="snooze-menu" id="snooze-'+t.id+'">' +
@@ -806,9 +808,22 @@ function renderTasks() {
                         '</div>' :
                         '<button onclick="extendTask(\''+t.id+'\')">+1h</button>') : '') +
                 '<button onclick="openEditTask(\''+t.id+'\')">Edit</button><button class="delete" onclick="deleteTask(\''+t.id+'\')">X</button>' +
-            '</div>' +
+            '</div>'+
         '</div>';
-    }).join('');
+    }
+
+    const regularTasks = filtered.filter(t => !t.is_reminder);
+    const reminderTasks = filtered.filter(t => t.is_reminder);
+    let html = '';
+    if (regularTasks.length) {
+        html += '<div class="section-header">📋 Tasks</div>';
+        html += regularTasks.map(renderTaskItem).join('');
+    }
+    if (reminderTasks.length) {
+        html += '<div class="section-header">⏰ Reminders</div>';
+        html += reminderTasks.map(renderTaskItem).join('');
+    }
+    list.innerHTML = html;
 }
 
 function switchTab(tab, btn) {
