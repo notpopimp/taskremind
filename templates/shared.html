@@ -334,12 +334,17 @@ function renderTasks() {
                 }
             }
             const cl = t.category && cats.includes(t.category) ? t.category : '';
-            return '<div class="task-item">' +
+            const reminderDue = t.due_at ? new Date(t.due_at.endsWith('Z') ? t.due_at : t.due_at+'Z') : null;
+            const nowDate = new Date();
+            const isReminderOverdue = !t.completed && reminderDue && reminderDue < nowDate;
+            const checkClass = 'task-check' + (t.completed ? ' done' : '');
+            return '<div class="task-item' + (t.completed ? ' completed' : (isReminderOverdue ? ' overdue' : '')) + '">' +
                 '<div class="task-priority"></div>' +
+                (permission === 'edit' ? '<div class="' + checkClass + '" onclick="toggleReminder(\'' + t.id + '\')" style="width:22px;height:22px"></div>' : '') +
                 '<div class="task-info">' +
                     '<div class="task-title">🔔 ' + esc(t.title) + '</div>' +
                     (t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : '') +
-                    (rangeStr ? '<div class="task-due">' + rangeStr + '</div>' : '') +
+                    (rangeStr ? '<div class="task-due' + (isReminderOverdue ? ' urgent' : '') + '">' + rangeStr + (isReminderOverdue ? ' OVERDUE' : '') + '</div>' : '') +
                     '<div class="task-meta">' +
                         (cl ? '<span class="tag cat">' + esc(cl) + '</span>' : '') +
                     '</div>' +
@@ -380,6 +385,11 @@ function renderTasks() {
 }
 
 async function toggleTask(id) {
+    if (permission !== 'edit') return;
+    await api('POST', '/api/shared/' + shareId + '/tasks/' + id + '/toggle');
+    await loadTasks();
+}
+async function toggleReminder(id) {
     if (permission !== 'edit') return;
     await api('POST', '/api/shared/' + shareId + '/tasks/' + id + '/toggle');
     await loadTasks();

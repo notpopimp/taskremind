@@ -818,20 +818,32 @@ function renderTasks() {
                 }
             }
             const catLabel = t.category && userCats.includes(t.category) ? t.category : '';
-            return '<div class="task-item">' +
+            const reminderDue = t.due_at ? new Date(t.due_at.endsWith('Z') ? t.due_at : t.due_at+'Z') : null;
+            const nowDate = new Date();
+            const isReminderOverdue = !t.completed && reminderDue && reminderDue < nowDate;
+            const checkClass = 'task-check' + (t.completed ? ' done' : '');
+            return '<div class="task-item' + (t.completed ? ' completed' : (isReminderOverdue ? ' overdue' : '')) + '">' +
                 '<div class="task-priority"></div>' +
+                '<div class="' + checkClass + '" onclick="toggleReminder(\'' + t.id + '\')" style="width:22px;height:22px"></div>' +
                 '<div class="task-info">' +
                     '<div class="task-title">🔔 ' + esc(t.title) + '</div>' +
                     (t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : '') +
-                    (rangeStr ? '<div class="task-due">' + rangeStr + '</div>' : '') +
+                    (rangeStr ? '<div class="task-due' + (isReminderOverdue ? ' urgent' : '') + '">' + rangeStr + (isReminderOverdue ? ' OVERDUE' : '') + '</div>' : '') +
                     '<div class="task-meta">' +
                         (catLabel ? '<span class="tag cat">' + esc(catLabel) + '</span>' : '') +
                     '</div>' +
                 '</div>' +
-                '<div class="task-actions">' +
-                    '<button onclick="openEditTask(\'' + t.id + '\')">Edit</button>' +
+                (!t.completed && t.due_at ? '<div class="task-actions">' +
+                    '<div class="snooze-wrap">' +
+                        '<button onclick="toggleSnooze(\'' + t.id + '\',event)">Snooze</button>' +
+                        '<div class="snooze-menu" id="snooze-' + t.id + '">' +
+                            '<div onclick="snoozeTask(\'' + t.id + '\',0.0833,event)">5 minutes</div>' +
+                            '<div onclick="snoozeTask(\'' + t.id + '\',1,event)">1 hour</div>' +
+                            '<div onclick="snoozeTask(\'' + t.id + '\',24,event)">1 day</div>' +
+                        '</div>' +
+                    '</div>' +
                     '<button class="delete" onclick="deleteTask(\'' + t.id + '\')">X</button>' +
-                '</div>' +
+                '</div>' : '<div class="task-actions"><button class="delete" onclick="deleteTask(\'' + t.id + '\')">X</button></div>') +
             '</div>';
         }
 
@@ -1229,6 +1241,12 @@ async function deleteTask(id) {
 
 async function extendTask(id) {
     await api('POST', '/api/tasks/'+id+'/extend', { hours:1 });
+    await loadTasks();
+}
+
+/* Reminder toggle (no stats impact) */
+async function toggleReminder(id) {
+    await api('POST', '/api/tasks/'+id+'/toggle', {});
     await loadTasks();
 }
 

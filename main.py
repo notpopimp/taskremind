@@ -781,6 +781,14 @@ def toggle_task(request: Request, task_id: str, body: TaskToggle = None):
         conn.close()
         raise HTTPException(404, "Task not found")
     
+    # Reminders: just toggle completed directly (no cycle)
+    if task.get("is_reminder"):
+        new_val = 0 if task["completed"] else 1
+        cur.execute("UPDATE tasks SET completed = %s, in_progress = 0 WHERE id = %s", (new_val, task_id))
+        cur.close()
+        conn.close()
+        return {"ok": True, "status": "completed" if new_val else "pending", "next_id": None}
+    
     cur_status = "in_progress" if task.get("in_progress") else ("completed" if task["completed"] else "pending")
     
     if cur_status == "pending":
@@ -957,14 +965,14 @@ def get_stats(request: Request):
     
     # Current user stats
     cur.execute(
-        "SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END), 0) as done FROM tasks WHERE user_id = %s",
+        "SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END), 0) as done FROM tasks WHERE user_id = %s AND (is_reminder = 0 OR is_reminder IS NULL)",
         (uid,),
     )
     user_stats = dict(cur.fetchone())
     
     # All users stats
     cur.execute(
-        "SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END), 0) as done FROM tasks"
+        "SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END), 0) as done FROM tasks WHERE (is_reminder = 0 OR is_reminder IS NULL)"
     )
     overall_stats = dict(cur.fetchone())
     
@@ -975,7 +983,7 @@ def get_stats(request: Request):
                COALESCE(SUM(CASE WHEN t.completed=1 THEN 1 ELSE 0 END), 0) as done,
                COALESCE(SUM(CASE WHEN t.completed=0 AND t.due_at IS NOT NULL AND t.due_at < %s THEN 1 ELSE 0 END), 0) as overdue
         FROM users u
-        LEFT JOIN tasks t ON t.user_id = u.id
+        LEFT JOIN tasks t ON t.user_id = u.id AND (t.is_reminder = 0 OR t.is_reminder IS NULL)
         GROUP BY u.id, u.username
         ORDER BY u.username
     """, (now_str,))
