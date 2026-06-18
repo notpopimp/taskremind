@@ -1010,9 +1010,10 @@ function closeCompleteModal() { document.getElementById('completeModal').classLi
 async function confirmComplete() {
     const name = document.getElementById('completeByName').value.trim();
     if (!name) return;
-    closeCompleteModal();
-    await api('POST', '/api/tasks/'+pendingCompleteId+'/toggle', { completed_by: name });
+    document.getElementById('completeModal').classList.remove('show');
+    const id = pendingCompleteId;
     pendingCompleteId = null;
+    await api('POST', '/api/tasks/'+id+'/toggle', { completed_by: name });
     await loadTasks();
 }
 
