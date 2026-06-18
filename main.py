@@ -1253,23 +1253,35 @@ def test_notification(request: Request):
 @app.get("/api/export/{fmt}")
 def export_tasks(request: Request, fmt: str = "json"):
     uid = get_user(request)
+    start = request.query_params.get("start", "")
+    end = request.query_params.get("end", "")
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM tasks WHERE user_id = %s ORDER BY created_at DESC", (uid,))
+    if start and end:
+        cur.execute(
+            "SELECT * FROM tasks WHERE user_id = %s AND due_at IS NOT NULL AND due_at >= %s AND due_at <= %s ORDER BY due_at ASC",
+            (uid, start, end),
+        )
+    else:
+        cur.execute("SELECT * FROM tasks WHERE user_id = %s ORDER BY created_at DESC", (uid,))
     rows = [dict(r) for r in cur.fetchall()]
     cur.close()
     conn.close()
     if fmt == "csv":
         import csv, io
         buf = io.StringIO()
-        if rows:
-            w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
-            w.writeheader()
-            w.writerows(rows)
-        else:
-            buf.write("id,title,description,due_at,completed,completed_by,recurrence,created_at\n")
+        fieldnames = ["id","title","description","due_at","completed","in_progress","completed_by","recurrence","priority","category","is_reminder","start_at","end_at","created_at"]
+        w = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+        if not rows:
+            buf.write("id,title,description,due_at,completed,in_progress,completed_by,recurrence,priority,category,is_reminder,start_at,end_at,created_at\n")
+        fname = "waypoint_tasks"
+        if start and end:
+            fname += f"_{start[:10]}_{end[:10]}"
+        fname += ".csv"
         return Response(content=buf.getvalue(), media_type="text/csv",
-                        headers={"Content-Disposition": "attachment; filename=tasks.csv"})
+                        headers={"Content-Disposition": f"attachment; filename={fname}"})
     return rows
 
 if __name__ == "__main__":
