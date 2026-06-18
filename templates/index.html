@@ -491,7 +491,8 @@
         <div class="modal-actions">
             <button class="modal-cancel" onclick="closeSettings()">Cancel</button>
             <button class="modal-confirm" onclick="saveSettings()">Save</button>
-            <button onclick="testNotification()" style="margin-top:6px;padding:5px 12px;border:1px solid #4165e1;border-radius:6px;background:#eef2ff;color:#4165e1;font-size:12px;cursor:pointer;width:100%">📧 Test Email Notification</button>
+            <button onclick="testNotification()" style="margin-top:6px;padding:5px 12px;border:1px solid #4165e1;border-radius:6px;background:#eef2ff;color:#4165e1;font-size:12px;cursor:pointer;width:100%">📧 Test Email</button>
+            <button onclick="testSms()" style="margin-top:6px;padding:5px 12px;border:1px solid #4165e1;border-radius:6px;background:#eef2ff;color:#4165e1;font-size:12px;cursor:pointer;width:100%">💬 Test SMS</button>
         </div>
     </div>
 </div>
@@ -1104,7 +1105,33 @@ async function testNotification() {
         }
     }
     btn.disabled = false;
-    btn.textContent = '📧 Test Email Notification';
+    btn.textContent = '📧 Test Email';
+}
+
+async function testSms() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳ Sending...';
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        const res = await fetch('/api/test-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+        const data = await res.json();
+        showToast('SMS: ' + (data.status || 'done'));
+    } catch(e) {
+        if (e.name === 'AbortError') {
+            showToast('SMS test timed out');
+        } else {
+            showToast('SMS failed: ' + e.message);
+        }
+    }
+    btn.disabled = false;
+    btn.textContent = '💬 Test SMS';
 }
 
 function renderCategoryEditor() {

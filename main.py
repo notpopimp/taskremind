@@ -1150,10 +1150,9 @@ def test_notification(request: Request):
     else:
         results.append("email skipped (no email set or SendGrid not configured)")
     if user["phone"] and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
-        try:
-            send_sms(user["phone"], "🧭 Waypoint test notification! SMS working. 🎉")
+        if send_sms(user["phone"], "🧭 Waypoint test notification! SMS working. 🎉"):
             results.append("sms sent")
-        except:
+        else:
             results.append("sms failed")
     else:
         results.append("sms skipped (no phone set or Twilio not configured)")
