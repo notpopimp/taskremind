@@ -705,8 +705,8 @@ function renderTasks() {
                             '</div>' +
                         '</div>' :
                         '<button onclick="extendTask(\''+t.id+'\')">+1h</button>') : '') +
-                (currentUser&&currentUser.role==='admin' ? '<button onclick="openEditTask(\''+t.id+'\')">Edit</button><button class="delete" onclick="deleteTask(\''+t.id+'\')">X</button>' : '')+
-            '</div>'+
+                '<button onclick="openEditTask(\''+t.id+'\')">Edit</button><button class="delete" onclick="deleteTask(\''+t.id+'\')">X</button>' +
+            '</div>' +
         '</div>';
     }).join('');
 }

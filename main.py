@@ -771,7 +771,6 @@ def toggle_task(request: Request, task_id: str, body: TaskToggle = None):
 @app.delete("/api/tasks/{task_id}")
 def delete_task(request: Request, task_id: str):
     uid = get_user(request)
-    require_admin(uid)
     conn = get_db()
     cur = conn.cursor()
     cur.execute("DELETE FROM tasks WHERE id = %s AND user_id = %s", (task_id, uid))
@@ -805,7 +804,6 @@ def extend_task(request: Request, task_id: str, body: ExtendRequest = None):
 @app.put("/api/tasks/{task_id}")
 def update_task(request: Request, task_id: str, body: TaskUpdate):
     uid = get_user(request)
-    require_admin(uid)
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM tasks WHERE id = %s AND user_id = %s", (task_id, uid))
