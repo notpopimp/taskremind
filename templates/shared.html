@@ -88,6 +88,10 @@
         .tag.recur { background: #e3f2fd; color: #1565c0; }
         .tag.cat { background: #f3e5f5; color: #7b1fa2; }
         .tag.done-by { background: #e8f5e9; color: #2e7d32; }
+        .assign-badge { display:inline-block; padding:1px 6px; border-radius:4px; font-size:10px; font-weight:500; background:#f3e5f5; }
+        .assign-badge.ben { color:#4165e1; }
+        .assign-badge.rachel { color:#e8526b; }
+        .assign-badge.sam { color:#27ae60; }
         .task-actions { display: flex; gap: 4px; flex-shrink: 0; }
         .task-actions button {
             padding: 4px 8px; border: none; border-radius: 6px;
@@ -205,13 +209,13 @@
         </div>
         <div id="taskFields" style="display:flex;gap:6px;flex-wrap:wrap">
             <input type="datetime-local" id="newDue" style="flex:1;min-width:100px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none">
-            <select id="newCat" style="flex:1;min-width:80px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none;background:white"><option value="">No category</option></select>
+            <select id="newAssigned" style="flex:1;min-width:80px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none;background:white"><option value="">Assign to...</option><option value="Ben">Ben</option><option value="Rachel">Rachel</option><option value="Sam">Sam</option></select>
             <button class="add-btn" onclick="addTask()" style="padding:10px 16px;border:none;border-radius:8px;background:#4165e1;color:white;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">+ Add</button>
         </div>
         <div id="remFields" style="display:none;gap:6px;flex-wrap:wrap">
             <input type="date" id="newRemStart" style="flex:1;min-width:80px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none">
             <input type="date" id="newRemEnd" style="flex:1;min-width:80px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none">
-            <select id="newRemCat" style="flex:1;min-width:80px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none;background:white"><option value="">No category</option></select>
+            <select id="newRemAssigned" style="flex:1;min-width:80px;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:12px;outline:none;background:white"><option value="">Assign to...</option><option value="Ben">Ben</option><option value="Rachel">Rachel</option><option value="Sam">Sam</option></select>
             <button class="add-btn" onclick="addReminder()" style="padding:10px 16px;border:none;border-radius:8px;background:#4165e1;color:white;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">+ Add</button>
         </div>
     </div>
@@ -246,7 +250,7 @@
                 <option value="high">High</option>
                 <option value="low">Low</option>
             </select>
-            <select id="editCategory"><option value="">No category</option></select>
+            <select id="editAssigned"><option value="">Assign to...</option><option value="Ben">Ben</option><option value="Rachel">Rachel</option><option value="Sam">Sam</option></select>
             <input type="datetime-local" id="editDue">
             <div class="modal-actions">
                 <button class="modal-cancel" onclick="closeEdit()">Cancel</button>
@@ -267,7 +271,6 @@ const shareId = '{{ share_id }}';
 let tasks = [];
 let calYear = 0, calMonth = 0;
 let editId = null;
-let cats = [];
 let permission = '{{ permission }}';
 let username = '{{ username }}';
 const LABELS = { none:'', daily:'Daily', weekly:'Weekly', biweekly:'Biweekly', monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly' };
@@ -301,23 +304,9 @@ async function loadTasks() {
     document.getElementById('addBar').style.display = permission === 'edit' ? 'flex' : 'none';
     renderTasks();
     if (document.getElementById('calendarView').classList.contains('show')) renderCalendar();
-    // Populate category dropdowns
-    populateCats();
 }
 
-function populateCats() {
-    const selects = ['newCat', 'newRemCat', 'editCategory'];
-    selects.forEach(sid => {
-        const sel = document.getElementById(sid);
-        if (!sel) return;
-        const v = sel.value;
-        sel.innerHTML = '<option value="">No category</option>';
-        cats.forEach(c => {
-            sel.innerHTML += '<option value="'+esc(c)+'">'+esc(c)+'</option>';
-        });
-        sel.value = v;
-    });
-}
+function populateCats() { /* no-op - categories replaced with assigned_to */ }
 
 function renderTasks() {
     const list = document.getElementById('taskList');
@@ -333,7 +322,7 @@ function renderTasks() {
                     try { rangeStr += ' - ' + new Date(t.end_at.slice(0,10)).toLocaleDateString(); } catch(e) { rangeStr += ' - ' + t.end_at.slice(0,10); }
                 }
             }
-            const cl = t.category && cats.includes(t.category) ? t.category : '';
+            const cl = t.assigned_to || '';
             const reminderDue = t.due_at ? new Date(t.due_at.endsWith('Z') ? t.due_at : t.due_at+'Z') : null;
             const nowDate = new Date();
             const isReminderOverdue = !t.completed && reminderDue && reminderDue < nowDate;
@@ -346,7 +335,7 @@ function renderTasks() {
                     (t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : '') +
                     (rangeStr ? '<div class="task-due' + (isReminderOverdue ? ' urgent' : '') + '">' + rangeStr + (isReminderOverdue ? ' OVERDUE' : '') + '</div>' : '') +
                     '<div class="task-meta">' +
-                        (cl ? '<span class="tag cat">' + esc(cl) + '</span>' : '') +
+                        (cl ? '<span class="assign-badge ' + cl.toLowerCase() + '">' + esc(cl) + '</span>' : '') +
                     '</div>' +
                 '</div>' +
             '</div>';
@@ -357,7 +346,7 @@ function renderTasks() {
         let ts = '';
         if (t.due_at) { try { ts = new Date(t.due_at.endsWith('Z')?t.due_at:t.due_at+'Z').toLocaleString(); } catch(e) { ts = t.due_at; } }
         const rl = t.recurrence && t.recurrence!=='none' ? LABELS[t.recurrence]||'' : '';
-        const cl = t.category && cats.includes(t.category) ? t.category : '';
+        const cl = t.assigned_to || '';
         let itemClass = 'task-item';
         if (t.completed) itemClass += ' completed';
         if (isInProgress) itemClass += ' in-progress';
@@ -375,7 +364,7 @@ function renderTasks() {
                 (t.due_at ? '<div class="task-due'+(od?' urgent':'')+'">'+ts+(od?' OVERDUE':'')+'</div>' : '')+
                 '<div class="task-meta">'+
                     (rl ? '<span class="tag recur">'+rl+'</span>' : '')+
-                    (cl ? '<span class="tag cat">'+esc(cl)+'</span>' : '')+
+                    (cl ? '<span class="assign-badge ' + cl.toLowerCase() + '">' + esc(cl) + '</span>' : '') +
                     (t.completed_by ? '<span class="tag done-by">✓ '+esc(t.completed_by)+'</span>' : '')+
                 '</div>'+
             '</div>'+
@@ -399,10 +388,10 @@ async function addTask() {
     const title = document.getElementById('newTitle').value.trim();
     if (!title) return;
     const dueInput = document.getElementById('newDue').value;
-    const cat = document.getElementById('newCat').value;
+    const assigned = document.getElementById('newAssigned').value;
     let due_at = null;
     if (dueInput) due_at = new Date(dueInput).toISOString();
-    await api('POST', '/api/shared/' + shareId + '/tasks', { title, due_at, category: cat });
+    await api('POST', '/api/shared/' + shareId + '/tasks', { title, due_at, assigned_to: assigned });
     document.getElementById('newTitle').value = '';
     document.getElementById('newDue').value = '';
     showToast('Task added');
@@ -425,10 +414,9 @@ async function addReminder() {
     if (!title) return;
     const start = document.getElementById('newRemStart').value;
     const end = document.getElementById('newRemEnd').value;
-    const cat = document.getElementById('newRemCat').value;
     if (!start) { showToast('Pick a start date'); return; }
     await api('POST', '/api/shared/' + shareId + '/tasks', {
-        title, category: cat,
+        title, assigned_to: document.getElementById('newRemAssigned').value,
         start_at: start,
         due_at: end || start,
         end_at: end || null,
@@ -447,7 +435,7 @@ function openEdit(id) {
     document.getElementById('editTitle').value = t.title || '';
     document.getElementById('editDesc').value = t.description || '';
     document.getElementById('editPriority').value = t.priority || 'medium';
-    document.getElementById('editCategory').value = t.category || '';
+    document.getElementById('editAssigned').value = t.assigned_to || '';
     if (t.due_at) {
         try { document.getElementById('editDue').value = new Date(t.due_at.endsWith('Z')?t.due_at:t.due_at+'Z').toISOString().slice(0,16); }
         catch(e) { document.getElementById('editDue').value = ''; }
@@ -460,9 +448,9 @@ async function saveEdit() {
     const title = document.getElementById('editTitle').value.trim();
     const description = document.getElementById('editDesc').value.trim();
     const priority = document.getElementById('editPriority').value;
-    const category = document.getElementById('editCategory').value;
+    const assigned_to = document.getElementById('editAssigned').value;
     const dueInput = document.getElementById('editDue').value;
-    const update = { title, description, priority, category };
+    const update = { title, description, priority, assigned_to };
     if (dueInput) update.due_at = new Date(dueInput).toISOString();
     await api('PUT', '/api/shared/' + shareId + '/tasks/' + editId, update);
     closeEdit();

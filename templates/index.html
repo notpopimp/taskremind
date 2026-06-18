@@ -237,22 +237,13 @@
         .task-meta .tag.cat { background: rgba(154,101,225,0.1); color: #7c4dff; }
         .task-meta .tag.done-by { background: rgba(67,160,71,0.1); color: #2e7d32; }
 
-        .waypoint-bar {
-            margin: 4px 16px;
-            display: flex; gap: 6px;
-            overflow-x: auto; white-space: nowrap;
-            padding: 4px 0;
-            -webkit-overflow-scrolling: touch;
+        .assign-badge {
+            display: inline-flex; align-items: center; gap: 3px;
+            padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500;
         }
-        .waypoint-bar::-webkit-scrollbar { display: none; }
-        .waypoint-pill {
-            padding: 4px 14px; border-radius: 16px;
-            border: 1px solid #d0d5dd; background: white;
-            color: #667788; font-size: 12px; cursor: pointer;
-            transition: all 0.15s; flex-shrink: 0;
-        }
-        .waypoint-pill:hover { border-color: #4165e1; color: #4165e1; }
-        .waypoint-pill.active { background: #4165e1; border-color: #4165e1; color: white; }
+        .assign-badge.ben { background: rgba(65,101,225,0.1); color: #4165e1; }
+        .assign-badge.rachel { background: rgba(232,82,107,0.1); color: #e8526b; }
+        .assign-badge.sam { background: rgba(46,204,113,0.1); color: #27ae60; }
 
         .task-actions { display: flex; gap: 6px; flex-shrink: 0; }
         .task-actions button {
@@ -459,7 +450,7 @@
 <!-- Toolbar -->
 <div class="toolbar">
     <div class="search-row">
-        <input type="text" id="searchInput" placeholder="Search tasks by keyword..." oninput="renderTasks()">
+        <input type="text" id="searchInput" placeholder="Search tasks by keyword..." oninput="handleSearch()">
     </div>
     <div class="add-row">
         <input type="text" id="newTaskTitle" placeholder="New task..." maxlength="100">
@@ -480,8 +471,11 @@
                 <option value="high">High</option>
                 <option value="low">Low</option>
             </select>
-            <select id="newTaskCategory">
-                <option value="">No category</option>
+            <select id="newTaskAssigned">
+                <option value="">Assign to...</option>
+                <option value="Ben">Ben</option>
+                <option value="Rachel">Rachel</option>
+                <option value="Sam">Sam</option>
             </select>
             <input type="datetime-local" id="newTaskDue">
             <select id="newTaskRemindBefore">
@@ -504,8 +498,11 @@
         <div id="reminderFields" style="display:none">
             <input type="date" id="newReminderStart">
             <input type="date" id="newReminderEnd">
-            <select id="newReminderCategory">
-                <option value="">No category</option>
+            <select id="newReminderAssigned">
+                <option value="">Assign to...</option>
+                <option value="Ben">Ben</option>
+                <option value="Rachel">Rachel</option>
+                <option value="Sam">Sam</option>
             </select>
         </div>
     </div>
@@ -519,16 +516,15 @@
 <!-- List -->
 <div id="listView">
     <div class="tabs">
-        <button class="tab active" onclick="switchTab('all',this)">All</button>
-        <button class="tab" onclick="switchTab('active',this)">Active</button>
-        <button class="tab" onclick="switchTab('in_progress',this)">In Progress</button>
-        <button class="tab" onclick="switchTab('overdue',this)">Overdue</button>
-        <button class="tab" onclick="switchTab('done',this)">Done</button>
+        <button class="tab active" onclick="switchTab('tasks',this)">📋 Tasks</button>
+        <button class="tab" onclick="switchTab('reminders',this)">⏰ Reminders</button>
+        <button class="tab" onclick="switchTab('timeoff',this)">🏖 Time Off</button>
+        <button class="tab" onclick="switchTab('attendance',this)">📊 Attendance</button>
     </div>
-    <div class="waypoint-bar" id="waypointBar"></div>
     <div class="task-list-view" id="taskList"></div>
+    <div class="task-list-view" id="timeoffList" style="display:none"></div>
+    <div class="task-list-view" id="attendanceView" style="display:none"></div>
 </div>
-
 <!-- Calendar -->
 <div class="cal-view" id="calendarView">
     <div class="cal-header">
@@ -731,15 +727,13 @@
 
 <script>
 let tasks = [];
-let currentTab = 'all';
-let currentWaypoint = '';
+let currentTab = 'tasks';
 let currentView = 'list';
 let calYear = 0, calMonth = 0;
 let pendingCompleteId = null;
 let notesWithContent = new Set();
 let currentUser = null;
 let currentType = 'task';
-let userCats = ["Personal", "Work", "Chores", "Health", "Scheduled", "Time Off", "Call Offs"];
 
 async function api(method, url, body) {
     const opts = { method, headers: {} };
@@ -749,36 +743,10 @@ async function api(method, url, body) {
     return res.json();
 }
 
-async function loadCategories() {
-    try {
-        const resp = await api('GET', '/api/categories');
-        if (resp && resp.categories) {
-            userCats = resp.categories;
-            populateCategorySelects();
-            renderWaypointBar();
-        }
-    } catch(e) {}
-}
-
-function populateCategorySelects() {
-    const selects = ['newTaskCategory','newReminderCategory','editCategory'];
-    selects.forEach(sid => {
-        const sel = document.getElementById(sid);
-        if (!sel) return;
-        const currentVal = sel.value;
-        sel.innerHTML = '<option value="">No category</option>';
-        userCats.forEach(label => {
-            sel.innerHTML += '<option value="'+esc(label)+'">'+esc(label)+'</option>';
-        });
-        sel.value = currentVal;
-    });
-}
-
 async function loadTasks() {
     tasks = await api('GET', '/api/tasks');
     notesWithContent = new Set(await api('GET', '/api/notes'));
     try { currentUser = await api('GET', '/api/me'); } catch(e) {}
-    await loadCategories();
     renderTasks();
     if (currentView==='calendar') renderCalendar();
     checkReminders();
@@ -786,18 +754,25 @@ async function loadTasks() {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+function handleSearch() {
+    if (currentTab === 'tasks' || currentTab === 'reminders') {
+        renderTasks();
+    } else if (currentTab === 'timeoff') {
+        loadAbsences();
+    }
+}
+
 function renderTasks() {
     const q = document.getElementById('searchInput').value.toLowerCase().trim();
     let filtered = tasks;
     if (q) filtered = filtered.filter(t => t.title.toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q));
-    if (currentTab==='active') filtered = filtered.filter(t => !t.completed && !t.in_progress);
-    else if (currentTab==='overdue') {
-        const now = new Date().toISOString();
-        filtered = filtered.filter(t => !t.completed && !t.in_progress && t.due_at && t.due_at < now);
+
+    // If on reminders tab, only show reminders; if on tasks tab, only show tasks
+    if (currentTab === 'reminders') {
+        filtered = filtered.filter(t => t.is_reminder);
+    } else {
+        filtered = filtered.filter(t => !t.is_reminder);
     }
-    else if (currentTab==='in_progress') filtered = filtered.filter(t => t.in_progress && !t.completed);
-    else if (currentTab==='done') filtered = filtered.filter(t => t.completed);
-    if (currentWaypoint) filtered = filtered.filter(t => t.category === currentWaypoint);
 
     const list = document.getElementById('taskList');
     if (!filtered.length) {
@@ -817,7 +792,6 @@ function renderTasks() {
                     try { rangeStr += ' - ' + new Date(t.end_at.slice(0,10)).toLocaleDateString(); } catch(e) { rangeStr += ' - ' + t.end_at.slice(0,10); }
                 }
             }
-            const catLabel = t.category && userCats.includes(t.category) ? t.category : '';
             const reminderDue = t.due_at ? new Date(t.due_at.endsWith('Z') ? t.due_at : t.due_at+'Z') : null;
             const nowDate = new Date();
             const isReminderOverdue = !t.completed && reminderDue && reminderDue < nowDate;
@@ -830,7 +804,7 @@ function renderTasks() {
                     (t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : '') +
                     (rangeStr ? '<div class="task-due' + (isReminderOverdue ? ' urgent' : '') + '">' + rangeStr + (isReminderOverdue ? ' OVERDUE' : '') + '</div>' : '') +
                     '<div class="task-meta">' +
-                        (catLabel ? '<span class="tag cat">' + esc(catLabel) + '</span>' : '') +
+                        (t.assigned_to ? '<span class="assign-badge ' + t.assigned_to.toLowerCase() + '">' + esc(t.assigned_to) + '</span>' : '') +
                     '</div>' +
                 '</div>' +
                 (!t.completed && t.due_at ? '<div class="task-actions">' +
@@ -857,7 +831,6 @@ function renderTasks() {
             catch(e) { timeStr = t.due_at; }
         }
         const recLabel = t.recurrence && t.recurrence!=='none' ? labels[t.recurrence]||'' : '';
-        const catLabel = t.category && userCats.includes(t.category) ? t.category : '';
         const doneBy = t.completed_by ? t.completed_by : '';
         let itemClass = 'task-item';
         if (t.completed) itemClass += ' completed';
@@ -880,7 +853,7 @@ function renderTasks() {
                 (t.due_at ? '<div class="task-due' + ((isOverdue || ipOverdue) ? ' urgent' : '') + '">' + timeStr + dueLabel + '</div>' : '') +
                 '<div class="task-meta">'+
                     (recLabel ? '<span class="tag recur">'+recLabel+'</span>' : '')+
-                    (catLabel ? '<span class="tag cat">'+catLabel+'</span>' : '')+
+                    (t.assigned_to ? '<span class="assign-badge ' + t.assigned_to.toLowerCase() + '">'+esc(t.assigned_to)+'</span>' : '')+
                     (doneBy ? '<span class="tag done-by">&check; '+esc(doneBy)+'</span>' : '')+
                 '</div>'+
             '</div>'+
@@ -901,29 +874,11 @@ function renderTasks() {
         '</div>';
     }
 
-    const regularTasks = filtered.filter(t => {
-        if (t.is_reminder) return false;
-        return true;
-    });
-    const reminderTasks = filtered.filter(t => {
-        if (!t.is_reminder) return false;
-        // Hide reminders past 30 days
-        if (t.due_at) {
-            const d = new Date(t.due_at.endsWith('Z') ? t.due_at : t.due_at+'Z');
-            const monthAgo = new Date();
-            monthAgo.setDate(monthAgo.getDate() - 30);
-            if (d < monthAgo) return false;
-        }
-        return true;
-    });
     let html = '';
-    if (regularTasks.length) {
-        html += '<div class="section-header">📋 Tasks</div>';
-        html += regularTasks.map(renderTaskItem).join('');
-    }
-    if (reminderTasks.length) {
-        html += '<div class="section-header">⏰ Reminders</div>';
-        html += reminderTasks.map(renderTaskItem).join('');
+    const items = filtered.map(renderTaskItem).join('');
+    if (filtered.length) {
+        html += '<div class="section-header">' + (currentTab === 'reminders' ? '⏰ Reminders' : '📋 Tasks') + '</div>';
+        html += items;
     }
     list.innerHTML = html;
 }
@@ -932,25 +887,18 @@ function switchTab(tab, btn) {
     currentTab = tab;
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    renderTasks();
-}
 
-function renderWaypointBar() {
-    const bar = document.getElementById('waypointBar');
-    if (!bar) return;
-    let cats = userCats;
-    let html = '<span class="waypoint-pill'+(currentWaypoint===''?' active':'')+'" onclick="switchWaypoint(\'\')">All</span>';
-    cats.forEach(cat => {
-        let e = esc(cat);
-        html += '<span class="waypoint-pill'+(currentWaypoint===cat?' active':'')+'" onclick="switchWaypoint(\''+e+'\')">'+e+'</span>';
-    });
-    bar.innerHTML = html;
-}
-function switchWaypoint(cat) {
-    currentWaypoint = cat;
-    renderWaypointBar();
-    renderTasks();
-    if (currentView==='calendar') renderCalendar();
+    document.getElementById('taskList').style.display = (tab === 'tasks' || tab === 'reminders') ? '' : 'none';
+    document.getElementById('timeoffList').style.display = tab === 'timeoff' ? '' : 'none';
+    document.getElementById('attendanceView').style.display = tab === 'attendance' ? '' : 'none';
+
+    if (tab === 'tasks' || tab === 'reminders') {
+        renderTasks();
+    } else if (tab === 'timeoff') {
+        loadAbsences();
+    } else if (tab === 'attendance') {
+        loadAttendance();
+    }
 }
 
 function switchView(view, btn) {
@@ -1091,10 +1039,10 @@ async function addTask() {
     if (currentType === 'reminder') {
         const startVal = document.getElementById('newReminderStart').value;
         const endVal = document.getElementById('newReminderEnd').value;
-        const category = document.getElementById('newReminderCategory').value || '';
+        const assigned = document.getElementById('newReminderAssigned').value || '';
         if (!startVal) { showToast('Please pick a start date'); return; }
         await api('POST', '/api/tasks', {
-            title, description, category,
+            title, description, assigned_to: assigned,
             start_at: startVal,
             due_at: endVal || startVal,
             end_at: endVal || null,
@@ -1104,10 +1052,10 @@ async function addTask() {
         const dueInput = document.getElementById('newTaskDue').value;
         const recurrence = document.getElementById('newTaskRecur').value;
         const priority = document.getElementById('newTaskPriority').value || 'medium';
-        const category = document.getElementById('newTaskCategory').value || '';
+        const assigned = document.getElementById('newTaskAssigned').value || '';
         let due_at = null;
         if (dueInput) { due_at = new Date(dueInput).toISOString(); }
-        await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, category, remind_before: parseInt(document.getElementById('newTaskRemindBefore').value) || 0 });
+        await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, assigned_to: assigned, remind_before: parseInt(document.getElementById('newTaskRemindBefore').value) || 0 });
     }
     document.getElementById('newTaskTitle').value='';
     document.getElementById('newTaskDesc').value='';
@@ -1322,6 +1270,170 @@ function doExportRange() {
     showToast('Downloading ' + start + ' to ' + end + '...');
 }
 
+/* Absence / Attendance */
+async function loadAbsences() {
+    const container = document.getElementById('timeoffList');
+    try {
+        const absences = await api('GET', '/api/absences');
+        let html = '<div style="margin-bottom:10px"><button onclick="addAbsenceForm()" style="padding:10px 20px;background:#4165e1;border:none;border-radius:10px;color:white;font-weight:600;cursor:pointer;width:100%">+ Add Absence</button></div>';
+        html += '<div id="absenceForm" style="display:none;background:#f8f9fc;border-radius:12px;padding:14px;margin-bottom:12px"></div>';
+        if (!absences.length) {
+            html += '<div class="empty">No absences recorded</div>';
+        } else {
+            absences.forEach(a => {
+                const dateStr = a.date ? new Date(a.date + 'T00:00:00').toLocaleDateString() : '?';
+                const endDateStr = a.end_date ? ' - ' + new Date(a.end_date + 'T00:00:00').toLocaleDateString() : '';
+                const typeIcon = a.type === 'call_off' ? '🚑' : '🏖';
+                const typeLabel = a.type === 'call_off' ? 'Call off' : 'Time off';
+                const coveredByHtml = a.covered_by ? '<div style="font-size:12px;color:#667788">Covered by: <strong>' + esc(a.covered_by) + '</strong></div>' : '';
+                html += '<div class="task-item" style="flex-wrap:wrap">' +
+                    '<div class="task-info" style="flex:1;min-width:0">' +
+                        '<div class="task-title">' + esc(a.absence_user) + '</div>' +
+                        '<div class="task-due">' + dateStr + endDateStr + '</div>' +
+                        '<div class="task-meta">' +
+                            '<span class="tag cat">' + typeIcon + ' ' + typeLabel + '</span>' +
+                        '</div>' +
+                        (a.reason ? '<div class="task-desc">' + esc(a.reason) + '</div>' : '') +
+                        coveredByHtml +
+                    '</div>' +
+                    '<div class="task-actions"><button class="delete" onclick="deleteAbsence(\'' + a.id + '\')">X</button></div>' +
+                '</div>';
+            });
+        }
+        container.innerHTML = html;
+        // Filter absences by search if on timeoff tab
+        const q = document.getElementById('searchInput').value.toLowerCase().trim();
+        if (q && currentTab === 'timeoff') {
+            const cards = container.querySelectorAll('.task-item');
+            cards.forEach(card => {
+                const text = card.textContent.toLowerCase();
+                card.style.display = text.includes(q) ? '' : 'none';
+            });
+        }
+    } catch(e) {
+        container.innerHTML = '<div class="empty">Failed to load absences</div>';
+    }
+}
+
+function addAbsenceForm() {
+    const formContainer = document.getElementById('absenceForm');
+    if (!formContainer) return;
+    const isVisible = formContainer.style.display !== 'none';
+    if (isVisible) {
+        formContainer.style.display = 'none';
+        return;
+    }
+    formContainer.style.display = 'block';
+    formContainer.innerHTML =
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
+            '<select id="absencePerson" style="flex:1;min-width:100px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
+                '<option value="">Person...</option>' +
+                '<option value="Ben">Ben</option>' +
+                '<option value="Rachel">Rachel</option>' +
+                '<option value="Sam">Sam</option>' +
+            '</select>' +
+            '<input type="date" id="absenceDate" style="flex:1;min-width:120px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
+            '<input type="date" id="absenceEndDate" placeholder="End date (optional)" style="flex:1;min-width:120px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
+        '</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
+            '<select id="absenceType" style="flex:1;min-width:100px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
+                '<option value="time_off">🏖 Time off</option>' +
+                '<option value="call_off">🚑 Call off</option>' +
+            '</select>' +
+            '<select id="absenceCoveredBy" style="flex:1;min-width:100px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
+                '<option value="">Covered by...</option>' +
+                '<option value="Ben">Ben</option>' +
+                '<option value="Rachel">Rachel</option>' +
+                '<option value="Sam">Sam</option>' +
+            '</select>' +
+        '</div>' +
+        '<div style="margin-bottom:8px">' +
+            '<textarea id="absenceReason" placeholder="Reason..." maxlength="200" style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px;resize:vertical;min-height:40px;font-family:inherit;box-sizing:border-box"></textarea>' +
+        '</div>' +
+        '<button onclick="createAbsence()" style="padding:10px 20px;background:#43a047;border:none;border-radius:8px;color:white;font-weight:600;cursor:pointer;width:100%">Save Absence</button>';
+}
+
+async function createAbsence() {
+    const absence_user = document.getElementById('absencePerson').value;
+    const date = document.getElementById('absenceDate').value;
+    const end_date = document.getElementById('absenceEndDate').value || null;
+    const type = document.getElementById('absenceType').value;
+    const reason = document.getElementById('absenceReason').value.trim();
+    const covered_by = document.getElementById('absenceCoveredBy').value || null;
+    if (!absence_user || !date) { showToast('Please select person and date'); return; }
+    await api('POST', '/api/absences', { absence_user, date, end_date, type, reason, covered_by });
+    showToast('Absence added');
+    document.getElementById('absenceForm').style.display = 'none';
+    loadAbsences();
+}
+
+async function deleteAbsence(id) {
+    if (!confirm('Delete this absence?')) return;
+    await api('DELETE', '/api/absences/' + id);
+    loadAbsences();
+}
+
+async function loadAttendance() {
+    const container = document.getElementById('attendanceView');
+    try {
+        const data = await api('GET', '/api/attendance/today');
+        const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        let html = '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">' +
+            '<h2 style="font-size:18px;color:#1a1a2e;margin-bottom:8px">📅 ' + today + '</h2>';
+        if (data && data.absences && data.absences.length) {
+            html += '<div style="margin-bottom:8px;color:#667788;font-size:14px">Out today:</div>';
+            data.absences.forEach(a => {
+                const typeIcon = a.type === 'call_off' ? '🚑' : '🏖';
+                html += '<div class="task-item" style="margin-bottom:6px">' +
+                    '<div class="task-info">' +
+                        '<div class="task-title">' + typeIcon + ' ' + esc(a.absence_user) + '</div>' +
+                        (a.reason ? '<div class="task-desc">' + esc(a.reason) + '</div>' : '') +
+                        (a.covered_by ? '<div class="task-due">Covered by: ' + esc(a.covered_by) + '</div>' : '') +
+                    '</div>' +
+                '</div>';
+            });
+        } else {
+            html += '<div style="text-align:center;padding:20px;color:#43a047;font-size:16px">✅ All present today</div>';
+        }
+        html += '</div>';
+        // Mini calendar overview for current month
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const firstDay = new Date(year, month, 1).getDay();
+        html += '<div style="background:white;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">' +
+            '<h3 style="font-size:15px;color:#1a1a2e;margin-bottom:8px">📆 ' + new Date(year, month).toLocaleString('en-US', { month: 'long', year: 'numeric' }) + ' Overview</h3>' +
+            '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-size:11px">';
+        const dayHeaders = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        dayHeaders.forEach(h => { html += '<div style="padding:4px 0;font-weight:600;color:#98a2b3">' + h + '</div>'; });
+        for (let i = 0; i < firstDay; i++) { html += '<div></div>'; }
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+            const isToday = dateStr === now.toISOString().slice(0, 10);
+            const dayAbsences = data && data.absences ? data.absences.filter(a => {
+                if (!a.date) return false;
+                const ad = a.date.slice(0, 10);
+                if (a.end_date) {
+                    return dateStr >= ad && dateStr <= a.end_date.slice(0, 10);
+                }
+                return dateStr === ad;
+            }) : [];
+            const hasAbsence = dayAbsences.length > 0;
+            html += '<div style="padding:6px 2px;border-radius:6px;' +
+                (isToday ? 'background:#e3f2fd;' : '') +
+                (hasAbsence ? 'background:#fff3e0;' : '') +
+                '"><div style="font-weight:' + (isToday ? '700' : '400') + ';color:' + (isToday ? '#4165e1' : '#1a1a2e') + '">' + d + '</div>' +
+                (hasAbsence ? '<div style="font-size:8px;color:#e65100;line-height:1">' + dayAbsences.length + ' off</div>' : '') +
+                '</div>';
+        }
+        html += '</div></div>';
+        container.innerHTML = html;
+    } catch(e) {
+        container.innerHTML = '<div class="empty">Failed to load attendance</div>';
+    }
+}
+
 let editTaskId = null;
 
 function openEditTask(id) {
@@ -1362,7 +1474,7 @@ function openEditTask(id) {
             document.getElementById('editEnd').value = '';
         }
     }
-    document.getElementById('editCategory').value = task.category || '';
+    document.getElementById('editCategory').value = task.assigned_to || '';
     document.getElementById('editModal').classList.add('show');
 }
 
@@ -1379,7 +1491,7 @@ async function saveEditTask() {
     const title = document.getElementById('editTitle').value.trim();
     const description = document.getElementById('editDesc').value.trim();
     const category = document.getElementById('editCategory').value;
-    let updateData = { title, description, category };
+    let updateData = { title, description, assigned_to: category };
     if (isReminder) {
         const startVal = document.getElementById('editStart').value;
         const endVal = document.getElementById('editEnd').value;
@@ -1408,7 +1520,6 @@ function openSettings() {
     if (currentUser) {
         document.getElementById('settingsPhone').value = currentUser.phone || '';
         document.getElementById('settingsEmail').value = currentUser.email || '';
-        renderCategoryEditor();
         // Show promote button only if not already admin and no other admin exists
         const promo = document.getElementById('adminPromo');
         promo.style.display = (currentUser.role !== 'admin') ? 'block' : 'none';
@@ -1522,50 +1633,11 @@ async function testSms() {
     btn.disabled = false;
     btn.textContent = '💬 Test SMS';
 }
-
-function renderCategoryEditor() {
-    const container = document.getElementById('catEditorList');
-    if (!container) return;
-    container.innerHTML = '';
-    userCats.forEach((label, i) => {
-        container.innerHTML += '<div style="display:flex;gap:4px;margin-bottom:4px">' +
-            '<input class="cat-edit-input" value="'+esc(label)+'" maxlength="40" style="flex:1;padding:6px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;box-sizing:border-box">' +
-            '<button onclick="removeCategoryField(this)" style="padding:4px 8px;border:none;border-radius:6px;background:#ffebee;color:#c62828;cursor:pointer;font-size:14px">✕</button></div>';
-    });
-    updateCatCount();
-}
-function updateCatCount() {
-    const count = document.querySelectorAll('#catEditorList .cat-edit-input').length;
-    const el = document.getElementById('catCount');
-    if (el) el.textContent = '('+count+' / 10)';
-}
-function addCategoryField() {
-    const container = document.getElementById('catEditorList');
-    if (!container || container.children.length >= 10) return;
-    container.innerHTML += '<div style="display:flex;gap:4px;margin-bottom:4px">' +
-        '<input class="cat-edit-input" value="" maxlength="40" placeholder="New category" style="flex:1;padding:6px 8px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;box-sizing:border-box">' +
-        '<button onclick="removeCategoryField(this)" style="padding:4px 8px;border:none;border-radius:6px;background:#ffebee;color:#c62828;cursor:pointer;font-size:14px">✕</button></div>';
-    updateCatCount();
-}
-function removeCategoryField(btn) {
-    btn.parentElement.remove();
-    updateCatCount();
 }
 async function saveSettings() {
     const phone = document.getElementById('settingsPhone').value.trim();
     const email = document.getElementById('settingsEmail').value.trim();
     await api('PUT', '/api/profile', { phone, email });
-    // Save categories from dynamic editor
-    const inputs = document.querySelectorAll('#catEditorList .cat-edit-input');
-    const catLabels = [];
-    inputs.forEach(inp => {
-        const val = inp.value.trim();
-        if (val) catLabels.push(val);
-    });
-    if (catLabels.length > 0) {
-        const updated = await api('PUT', '/api/categories', { categories: catLabels });
-        if (updated && updated.categories) { userCats = updated.categories; populateCategorySelects(); }
-    }
     try { currentUser = await api('GET', '/api/me'); } catch(e) {}
     // Subscribe to push notifications
     if ('Notification' in window && Notification.permission === 'granted') {

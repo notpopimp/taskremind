@@ -35,7 +35,7 @@ class TaskCreate(BaseModel):
     due_at: str | None = None
     recurrence: str = "none"
     priority: str = "medium"
-    category: str = ""
+    assigned_to: str = ""
     start_at: str | None = None
     is_reminder: bool = False
     end_at: str | None = None
@@ -50,7 +50,7 @@ class TaskUpdate(BaseModel):
     due_at: str | None = None
     recurrence: str | None = None
     priority: str | None = None
-    category: str | None = None
+    assigned_to: str | None = None
     start_at: str | None = None
     is_reminder: bool | None = None
     end_at: str | None = None
@@ -58,6 +58,14 @@ class TaskUpdate(BaseModel):
 
 class NotePut(BaseModel):
     content: str = ""
+
+class AbsenceCreate(BaseModel):
+    absence_user: str
+    date: str
+    end_date: str | None = None
+    type: str = "call_off"
+    reason: str = ""
+    covered_by: str = ""
 
 # ---------- Database ----------
 def get_db():
@@ -102,7 +110,7 @@ def init_db():
     """)
     # Add columns if upgrading
     for col, dtype in [("completed_by", "TEXT DEFAULT ''"), ("recurrence", "TEXT DEFAULT 'none'"),
-                       ("priority", "TEXT DEFAULT 'medium'"), ("category", "TEXT DEFAULT ''"),
+                       ("priority", "TEXT DEFAULT 'medium'"), ("assigned_to", "TEXT DEFAULT ''"),
                        ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL"),
                        ("start_at", "TEXT DEFAULT NULL"), ("remind_before", "INTEGER DEFAULT 0"),
                        ("last_reminded_at", "TEXT DEFAULT NULL"), ("in_progress", "INTEGER DEFAULT 0")]:
@@ -112,6 +120,14 @@ def init_db():
         """)
         if cur.fetchone()["count"] == 0:
             cur.execute(f"ALTER TABLE tasks ADD COLUMN {col} {dtype}")
+    # Rename category → assigned_to (migration for existing DBs)
+    cur.execute("""
+        SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_name='tasks' AND column_name='category'
+    """)
+    if cur.fetchone()["count"] > 0:
+        cur.execute("ALTER TABLE tasks RENAME COLUMN category TO assigned_to")
+        print("  ✓ Renamed tasks.category → tasks.assigned_to")
     # Push subscriptions table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS push_subs (
@@ -126,8 +142,7 @@ def init_db():
     """)
     # Add user columns if upgrading
     for col, dtype in [("role", "TEXT DEFAULT 'user'"),
-                       ("phone", "TEXT DEFAULT ''"), ("email", "TEXT DEFAULT ''"),
-                       ("categories", "TEXT DEFAULT '{}'")]:
+                       ("phone", "TEXT DEFAULT ''"), ("email", "TEXT DEFAULT ''")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='users' AND column_name='{col}'
@@ -142,6 +157,14 @@ def init_db():
     admin_count = cur.fetchone()["cnt"]
     if admin_count == 0:
         cur.execute("UPDATE users SET role = 'admin' WHERE id = (SELECT id FROM users ORDER BY created_at ASC LIMIT 1)")
+    # Drop legacy categories column from users if it exists
+    cur.execute("""
+        SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_name='users' AND column_name='categories'
+    """)
+    if cur.fetchone()["count"] > 0:
+        cur.execute("ALTER TABLE users DROP COLUMN categories")
+        print("  ✓ Dropped legacy users.categories column")
     # Notes table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS notes (
@@ -156,6 +179,20 @@ def init_db():
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL REFERENCES users(id),
             permission TEXT NOT NULL DEFAULT 'view',
+            created_at TEXT NOT NULL
+        )
+    """)
+    # Absences / Attendance table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS absences (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            absence_user TEXT NOT NULL,
+            date TEXT NOT NULL,
+            end_date TEXT,
+            type TEXT NOT NULL DEFAULT 'call_off',
+            reason TEXT DEFAULT '',
+            covered_by TEXT DEFAULT '',
             created_at TEXT NOT NULL
         )
     """)
@@ -343,17 +380,13 @@ def whoami(request: Request):
     uid = get_user(request)
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, username, role, phone, email, categories FROM users WHERE id = %s", (uid,))
+    cur.execute("SELECT id, username, role, phone, email FROM users WHERE id = %s", (uid,))
     user = cur.fetchone()
     cur.close()
     conn.close()
     if not user:
         raise HTTPException(404, "User not found")
     ud = dict(user)
-    try:
-        ud["categories"] = json.loads(ud.get("categories", "{}"))
-    except:
-        ud["categories"] = {}
     return ud
 
 @app.get("/api/me/promote")
@@ -418,67 +451,7 @@ def rename_user(request: Request, user_id: str, body: dict):
     conn.close()
     return {"ok": True, "username": new_name}
 
-# ---------- User Categories ----------
-DEFAULT_CATEGORIES = ["Personal", "Work", "Chores", "Health", "Scheduled", "Time Off", "Call Offs"]
-
-def parse_cats(raw):
-    """Parse categories JSON string to list."""
-    if not raw:
-        return None
-    try:
-        val = json.loads(raw)
-        if isinstance(val, list) and all(isinstance(x, str) for x in val):
-            return val
-    except:
-        pass
-    return None
-
-@app.get("/api/categories")
-def get_categories(request: Request):
-    uid = get_user(request)
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT categories FROM users WHERE id = %s", (uid,))
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-    if not row:
-        raise HTTPException(404, "User not found")
-    cats = parse_cats(row["categories"])
-    if cats is None:
-        # Migration: if old format (dict), convert to sorted list of labels
-        try:
-            old = json.loads(row["categories"]) if row["categories"] else {}
-            if isinstance(old, dict):
-                cats = sorted(old.values())
-            else:
-                cats = list(DEFAULT_CATEGORIES)
-        except:
-            cats = list(DEFAULT_CATEGORIES)
-    # Fallback if empty
-    if not cats:
-        cats = list(DEFAULT_CATEGORIES)
-    return {"categories": cats}
-
-@app.put("/api/categories")
-def update_categories(request: Request, body: dict):
-    uid = get_user(request)
-    if not isinstance(body, dict) or "categories" not in body:
-        raise HTTPException(400, "Body must have a 'categories' key")
-    cats = body["categories"]
-    if not isinstance(cats, list) or not all(isinstance(x, str) for x in cats):
-        raise HTTPException(400, "categories must be an array of strings")
-    if len(cats) > 10:
-        raise HTTPException(400, "Maximum 10 categories allowed")
-    # Remove empty strings
-    cats = [c.strip() for c in cats if c.strip()]
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("UPDATE users SET categories = %s WHERE id = %s", (json.dumps(cats), uid))
-    cur.close()
-    conn.close()
-    return {"categories": cats}
-
+# ---------- Push Notifications ----------
 @app.post("/api/push/subscribe")
 def push_subscribe(request: Request, body: dict):
     uid = get_user(request)
@@ -763,8 +736,8 @@ def create_task(request: Request, body: TaskCreate):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, in_progress, priority, category, recurrence, created_at, is_reminder, end_at, start_at, remind_before) VALUES (%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
-        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now_iso(), int(body.is_reminder), body.end_at or None, body.start_at or None, body.remind_before),
+        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, in_progress, priority, assigned_to, recurrence, created_at, is_reminder, end_at, start_at, remind_before) VALUES (%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.assigned_to, body.recurrence, now_iso(), int(body.is_reminder), body.end_at or None, body.start_at or None, body.remind_before),
     )
     task = cur.fetchone()
     cur.close()
@@ -816,8 +789,8 @@ def toggle_task(request: Request, task_id: str, body: TaskToggle = None):
         if next_due:
             next_id = uuid.uuid4().hex[:12]
             cur.execute(
-                "INSERT INTO tasks (id, user_id, title, description, due_at, completed, in_progress, priority, category, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s)",
-                (next_id, uid, task["title"], task["description"], next_due, task.get("priority", "medium"), task.get("category", ""), task["recurrence"], now_iso()),
+                "INSERT INTO tasks (id, user_id, title, description, due_at, completed, in_progress, priority, assigned_to, recurrence, created_at) VALUES (%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s)",
+                (next_id, uid, task["title"], task["description"], next_due, task.get("priority", "medium"), task.get("assigned_to", ""), task["recurrence"], now_iso()),
             )
     cur.close()
     conn.close()
@@ -877,8 +850,8 @@ def update_task(request: Request, task_id: str, body: TaskUpdate):
         cur.execute("UPDATE tasks SET recurrence = %s WHERE id = %s", (body.recurrence, task_id))
     if body.priority is not None:
         cur.execute("UPDATE tasks SET priority = %s WHERE id = %s", (body.priority, task_id))
-    if body.category is not None:
-        cur.execute("UPDATE tasks SET category = %s WHERE id = %s", (body.category, task_id))
+    if body.assigned_to is not None:
+        cur.execute("UPDATE tasks SET assigned_to = %s WHERE id = %s", (body.assigned_to, task_id))
     if body.start_at is not None:
         cur.execute("UPDATE tasks SET start_at = %s WHERE id = %s", (body.start_at or None, task_id))
     if body.is_reminder is not None:
@@ -907,6 +880,70 @@ def calendar_tasks(request: Request):
     cur.close()
     conn.close()
     return [dict(r) for r in rows]
+
+# ---------- Absences / Attendance Routes ----------
+@app.get("/api/absences")
+def list_absences(request: Request):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM absences ORDER BY date DESC, created_at DESC")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/absences")
+def create_absence(request: Request, body: AbsenceCreate):
+    uid = get_user(request)
+    absence_id = uuid.uuid4().hex[:12]
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO absences (id, user_id, absence_user, date, end_date, type, reason, covered_by, created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        (absence_id, uid, body.absence_user, body.date, body.end_date, body.type, body.reason, body.covered_by, now_iso()),
+    )
+    cur.close()
+    conn.close()
+    return {"ok": True, "id": absence_id}
+
+@app.put("/api/absences/{absence_id}")
+def update_absence(request: Request, absence_id: str, body: AbsenceCreate):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE absences SET absence_user=%s, date=%s, end_date=%s, type=%s, reason=%s, covered_by=%s WHERE id=%s",
+        (body.absence_user, body.date, body.end_date, body.type, body.reason, body.covered_by, absence_id),
+    )
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
+@app.delete("/api/absences/{absence_id}")
+def delete_absence(request: Request, absence_id: str):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM absences WHERE id = %s", (absence_id,))
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
+@app.get("/api/attendance/today")
+def today_attendance(request: Request):
+    uid = get_user(request)
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM absences WHERE date <= %s AND (end_date IS NULL OR end_date >= %s) ORDER BY type ASC",
+        (today, today),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {"date": today, "absences": [dict(r) for r in rows]}
 
 # ---------- Notes Routes ----------
 @app.get("/api/notes")
@@ -1142,8 +1179,8 @@ def create_shared_task(share_id: str, body: TaskCreate = None):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, category, recurrence, created_at, is_reminder, end_at, start_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
-        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.category, body.recurrence, now, int(body.is_reminder), body.end_at or None, body.start_at or None),
+        "INSERT INTO tasks (id, user_id, title, description, due_at, completed, priority, assigned_to, recurrence, created_at, is_reminder, end_at, start_at) VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+        (task_id, uid, body.title, body.description, body.due_at or None, body.priority, body.assigned_to, body.recurrence, now, int(body.is_reminder), body.end_at or None, body.start_at or None),
     )
     task = cur.fetchone()
     cur.close()
@@ -1165,7 +1202,7 @@ def update_shared_task(share_id: str, task_id: str, body: TaskUpdate = None):
         conn.close()
         raise HTTPException(404, "Task not found")
     updates = {}
-    for field in ["title", "description", "due_at", "recurrence", "priority", "category", "start_at", "end_at", "is_reminder"]:
+    for field in ["title", "description", "due_at", "recurrence", "priority", "assigned_to", "start_at", "end_at", "is_reminder"]:
         val = getattr(body, field, None)
         if val is not None:
             updates[field] = val
@@ -1183,24 +1220,13 @@ def shared_me(share_id: str):
     share = _get_share_or_404(share_id)
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT username, categories FROM users WHERE id = %s", (share["user_id"],))
+    cur.execute("SELECT username FROM users WHERE id = %s", (share["user_id"],))
     user = cur.fetchone()
     cur.close()
     conn.close()
     if not user:
         raise HTTPException(404, "User not found")
-    # Parse categories
-    try:
-        cats = json.loads(user["categories"]) if user["categories"] else []
-        if isinstance(cats, dict):
-            cats = sorted(cats.values())
-        elif not isinstance(cats, list):
-            cats = list(DEFAULT_CATEGORIES)
-        if not cats:
-            cats = list(DEFAULT_CATEGORIES)
-    except:
-        cats = list(DEFAULT_CATEGORIES)
-    return {"username": user["username"], "categories": cats, "permission": share["permission"]}
+    return {"username": user["username"], "permission": share["permission"]}
 
 # ---------- Reminder Check ----------
 @app.get("/api/reminders")
@@ -1280,12 +1306,12 @@ def export_tasks(request: Request, fmt: str = "json"):
     if fmt == "csv":
         import csv, io
         buf = io.StringIO()
-        fieldnames = ["id","title","description","due_at","completed","in_progress","completed_by","recurrence","priority","category","is_reminder","start_at","end_at","created_at"]
+        fieldnames = ["id","title","description","due_at","completed","in_progress","completed_by","recurrence","priority","assigned_to","is_reminder","start_at","end_at","created_at"]
         w = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
         if not rows:
-            buf.write("id,title,description,due_at,completed,in_progress,completed_by,recurrence,priority,category,is_reminder,start_at,end_at,created_at\n")
+            buf.write("id,title,description,due_at,completed,in_progress,completed_by,recurrence,priority,assigned_to,is_reminder,start_at,end_at,created_at\n")
         fname = "waypoint_tasks"
         if start and end:
             fname += f"_{start[:10]}_{end[:10]}"
