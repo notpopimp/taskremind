@@ -518,8 +518,7 @@
     <div class="tabs">
         <button class="tab active" onclick="switchTab('tasks',this)">📋 Tasks</button>
         <button class="tab" onclick="switchTab('reminders',this)">⏰ Reminders</button>
-        <button class="tab" onclick="switchTab('timeoff',this)">🏖 Time Off</button>
-        <button class="tab" onclick="switchTab('attendance',this)">📊 Attendance</button>
+        <button class="tab" onclick="switchTab('timeoff',this)">🏖 Time Off & Attendance</button>
     </div>
     <div class="task-list-view" id="taskList"></div>
     <div class="task-list-view" id="timeoffList" style="display:none"></div>
@@ -890,13 +889,12 @@ function switchTab(tab, btn) {
 
     document.getElementById('taskList').style.display = (tab === 'tasks' || tab === 'reminders') ? '' : 'none';
     document.getElementById('timeoffList').style.display = tab === 'timeoff' ? '' : 'none';
-    document.getElementById('attendanceView').style.display = tab === 'attendance' ? '' : 'none';
+    document.getElementById('attendanceView').style.display = tab === 'timeoff' ? '' : 'none';
 
     if (tab === 'tasks' || tab === 'reminders') {
         renderTasks();
     } else if (tab === 'timeoff') {
         loadAbsences();
-    } else if (tab === 'attendance') {
         loadAttendance();
     }
 }
