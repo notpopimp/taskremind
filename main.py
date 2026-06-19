@@ -122,12 +122,18 @@ def init_db():
             cur.execute(f"ALTER TABLE tasks ADD COLUMN {col} {dtype}")
     # Rename category → assigned_to (migration for existing DBs)
     cur.execute("""
-        SELECT COUNT(*) FROM information_schema.columns
-        WHERE table_name='tasks' AND column_name='category'
+        SELECT (SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_name='tasks' AND column_name='category') AS has_cat,
+               (SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_name='tasks' AND column_name='assigned_to') AS has_asgn
     """)
-    if cur.fetchone()["count"] > 0:
+    row = cur.fetchone()
+    if row["has_cat"] > 0 and row["has_asgn"] == 0:
         cur.execute("ALTER TABLE tasks RENAME COLUMN category TO assigned_to")
         print("  ✓ Renamed tasks.category → tasks.assigned_to")
+    elif row["has_cat"] > 0 and row["has_asgn"] > 0:
+        cur.execute("ALTER TABLE tasks DROP COLUMN category")
+        print("  ✓ Dropped redundant tasks.category (assigned_to already exists)")
     # Push subscriptions table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS push_subs (
