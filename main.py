@@ -213,12 +213,20 @@ SEED_USERS = {
 }
 
 def seed_users():
-    """Ensure Ben, Rachel, and Sam exist. Won't overwrite existing users."""
+    """Ensure Ben, Rachel, and Sam exist with PIN 0000."""
     conn = get_db()
     cur = conn.cursor()
     for name, info in SEED_USERS.items():
         cur.execute("SELECT id FROM users WHERE username = %s", (name,))
-        if not cur.fetchone():
+        existing = cur.fetchone()
+        if existing:
+            # Force PIN to 0000 for existing users
+            cur.execute(
+                "UPDATE users SET pin_hash = %s, role = %s WHERE username = %s",
+                (hash_pin(info["pin"]), info["role"], name),
+            )
+            print(f"  ✓ Updated PIN for {name}")
+        else:
             user_id = uuid.uuid4().hex[:12]
             cur.execute(
                 "INSERT INTO users (id, username, pin_hash, created_at, role) VALUES (%s, %s, %s, %s, %s)",
@@ -370,16 +378,6 @@ def login(body: LoginRequest):
         resp.set_cookie(key="session", value=token, httponly=True, max_age=86400*30)
         return resp
     raise HTTPException(401, "Invalid username or PIN")
-
-@app.get("/api/debug/users")
-def debug_users():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id, username, pin_hash, role FROM users ORDER BY username")
-    users = [dict(r) for r in cur.fetchall()]
-    cur.close()
-    conn.close()
-    return {"users": users}
 
 @app.post("/api/register")
 def register(body: RegisterRequest):
