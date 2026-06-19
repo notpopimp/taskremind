@@ -375,7 +375,7 @@ def login(body: LoginRequest):
 def debug_users():
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, username, role FROM users ORDER BY username")
+    cur.execute("SELECT id, username, pin_hash, role FROM users ORDER BY username")
     users = [dict(r) for r in cur.fetchall()]
     cur.close()
     conn.close()
