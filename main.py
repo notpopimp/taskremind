@@ -371,6 +371,16 @@ def login(body: LoginRequest):
         return resp
     raise HTTPException(401, "Invalid username or PIN")
 
+@app.get("/api/debug/users")
+def debug_users():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, username, role FROM users ORDER BY username")
+    users = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return {"users": users}
+
 @app.post("/api/register")
 def register(body: RegisterRequest):
     raise HTTPException(403, "Registration is closed. Waypoint has 3 members: Ben, Rachel, and Sam.")
