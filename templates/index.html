@@ -238,12 +238,22 @@
         .task-meta .tag.done-by { background: rgba(67,160,71,0.1); color: #2e7d32; }
 
         .assign-badge {
-            display: inline-flex; align-items: center; gap: 3px;
-            padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500;
+            display: inline-block; padding: 2px 8px; border-radius: 10px;
+            font-size: 11px; font-weight: 600;
         }
         .assign-badge.ben { background: rgba(65,101,225,0.1); color: #4165e1; }
         .assign-badge.rachel { background: rgba(232,82,107,0.1); color: #e8526b; }
         .assign-badge.sam { background: rgba(46,204,113,0.1); color: #27ae60; }
+        .assign-multi { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        .assign-chip {
+            display: inline-block; padding: 6px 14px; border-radius: 16px;
+            font-size: 13px; font-weight: 500; cursor: pointer;
+            background: #f0f2f5; color: #667788; border: 1px solid #d0d5dd;
+            transition: all 0.2s; user-select: none;
+        }
+        .assign-chip.selected {
+            background: #4165e1; color: white; border-color: #4165e1;
+        }
 
         .task-actions { display: flex; gap: 6px; flex-shrink: 0; }
         .task-actions button {
@@ -471,12 +481,11 @@
                 <option value="high">High</option>
                 <option value="low">Low</option>
             </select>
-            <select id="newTaskAssigned">
-                <option value="">Assign to...</option>
-                <option value="Ben">Ben</option>
-                <option value="Rachel">Rachel</option>
-                <option value="Sam">Sam</option>
-            </select>
+            <div id="newTaskAssigned" class="assign-multi">
+                <div class="assign-chip" data-name="Ben" onclick="toggleAssign(this)">Ben</div>
+                <div class="assign-chip" data-name="Rachel" onclick="toggleAssign(this)">Rachel</div>
+                <div class="assign-chip" data-name="Sam" onclick="toggleAssign(this)">Sam</div>
+            </div>
             <input type="datetime-local" id="newTaskDue">
             <select id="newTaskRemindBefore">
                 <option value="0">At due time</option>
@@ -498,12 +507,11 @@
         <div id="reminderFields" style="display:none">
             <input type="date" id="newReminderStart">
             <input type="date" id="newReminderEnd">
-            <select id="newReminderAssigned">
-                <option value="">Assign to...</option>
-                <option value="Ben">Ben</option>
-                <option value="Rachel">Rachel</option>
-                <option value="Sam">Sam</option>
-            </select>
+            <div id="newReminderAssigned" class="assign-multi">
+                <div class="assign-chip" data-name="Ben" onclick="toggleAssign(this)">Ben</div>
+                <div class="assign-chip" data-name="Rachel" onclick="toggleAssign(this)">Rachel</div>
+                <div class="assign-chip" data-name="Sam" onclick="toggleAssign(this)">Sam</div>
+            </div>
         </div>
     </div>
 </div>
@@ -670,10 +678,12 @@
                 </select>
             </div>
             <div style="flex:1;min-width:100px">
-                <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Category</label>
-                <select id="editCategory" style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px">
-                    <option value="">No category</option>
-                </select>
+                <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Assigned to</label>
+                <div id="editCategory" class="assign-multi">
+                    <div class="assign-chip" data-name="Ben" onclick="toggleAssign(this)">Ben</div>
+                    <div class="assign-chip" data-name="Rachel" onclick="toggleAssign(this)">Rachel</div>
+                    <div class="assign-chip" data-name="Sam" onclick="toggleAssign(this)">Sam</div>
+                </div>
             </div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
@@ -753,6 +763,22 @@ async function loadTasks() {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+function toggleAssign(el) {
+    el.classList.toggle('selected');
+}
+
+function getAssignValue(containerId) {
+    const chips = document.querySelectorAll('#' + containerId + ' .assign-chip.selected');
+    return Array.from(chips).map(c => c.dataset.name).join(',');
+}
+
+function setAssignValue(containerId, value) {
+    const names = value ? value.split(',').map(s => s.trim()) : [];
+    document.querySelectorAll('#' + containerId + ' .assign-chip').forEach(c => {
+        c.classList.toggle('selected', names.includes(c.dataset.name));
+    });
+}
+
 function handleSearch() {
     if (currentTab === 'tasks' || currentTab === 'reminders') {
         renderTasks();
@@ -803,7 +829,7 @@ function renderTasks() {
                     (t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : '') +
                     (rangeStr ? '<div class="task-due' + (isReminderOverdue ? ' urgent' : '') + '">' + rangeStr + (isReminderOverdue ? ' OVERDUE' : '') + '</div>' : '') +
                     '<div class="task-meta">' +
-                        (t.assigned_to ? '<span class="assign-badge ' + t.assigned_to.toLowerCase() + '">' + esc(t.assigned_to) + '</span>' : '') +
+                        (t.assigned_to ? t.assigned_to.split(',').map(function(n){var c=n.trim().toLowerCase();return '<span class=\"assign-badge '+c+'\">'+esc(n.trim())+'</span>';}).join('') : '') +
                     '</div>' +
                 '</div>' +
                 (!t.completed && t.due_at ? '<div class="task-actions">' +
@@ -852,7 +878,7 @@ function renderTasks() {
                 (t.due_at ? '<div class="task-due' + ((isOverdue || ipOverdue) ? ' urgent' : '') + '">' + timeStr + dueLabel + '</div>' : '') +
                 '<div class="task-meta">'+
                     (recLabel ? '<span class="tag recur">'+recLabel+'</span>' : '')+
-                    (t.assigned_to ? '<span class="assign-badge ' + t.assigned_to.toLowerCase() + '">'+esc(t.assigned_to)+'</span>' : '')+
+                    (t.assigned_to ? t.assigned_to.split(',').map(function(n){var c=n.trim().toLowerCase();return '<span class=\"assign-badge '+c+'\">'+esc(n.trim())+'</span>';}).join('') : '')+
                     (doneBy ? '<span class="tag done-by">&check; '+esc(doneBy)+'</span>' : '')+
                 '</div>'+
             '</div>'+
@@ -1037,7 +1063,7 @@ async function addTask() {
     if (currentType === 'reminder') {
         const startVal = document.getElementById('newReminderStart').value;
         const endVal = document.getElementById('newReminderEnd').value;
-        const assigned = document.getElementById('newReminderAssigned').value || '';
+        const assigned = getAssignValue('newReminderAssigned');
         if (!startVal) { showToast('Please pick a start date'); return; }
         await api('POST', '/api/tasks', {
             title, description, assigned_to: assigned,
@@ -1050,7 +1076,7 @@ async function addTask() {
         const dueInput = document.getElementById('newTaskDue').value;
         const recurrence = document.getElementById('newTaskRecur').value;
         const priority = document.getElementById('newTaskPriority').value || 'medium';
-        const assigned = document.getElementById('newTaskAssigned').value || '';
+        const assigned = getAssignValue('newTaskAssigned');
         let due_at = null;
         if (dueInput) { due_at = new Date(dueInput).toISOString(); }
         await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, assigned_to: assigned, remind_before: parseInt(document.getElementById('newTaskRemindBefore').value) || 0 });
@@ -1472,7 +1498,7 @@ function openEditTask(id) {
             document.getElementById('editEnd').value = '';
         }
     }
-    document.getElementById('editCategory').value = task.assigned_to || '';
+    setAssignValue('editCategory', task.assigned_to || '');
     document.getElementById('editModal').classList.add('show');
 }
 
@@ -1488,7 +1514,7 @@ async function saveEditTask() {
     const isReminder = task.is_reminder;
     const title = document.getElementById('editTitle').value.trim();
     const description = document.getElementById('editDesc').value.trim();
-    const category = document.getElementById('editCategory').value;
+    const category = getAssignValue('editCategory');
     let updateData = { title, description, assigned_to: category };
     if (isReminder) {
         const startVal = document.getElementById('editStart').value;
