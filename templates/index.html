@@ -487,13 +487,13 @@
                 <div class="assign-chip" data-name="Sam" onclick="toggleAssign(this)">Sam</div>
             </div>
             <input type="datetime-local" id="newTaskDue">
-            <select id="newTaskRemindBefore">
-                <option value="0">At due time</option>
-                <option value="60">1 hour before</option>
-                <option value="1440">1 day before</option>
-                <option value="4320">3 days before</option>
-                <option value="10080">1 week before</option>
-            </select>
+            <div id="newRemindChips" class="assign-multi">
+                <div class="assign-chip" data-value="60" onclick="toggleRemindChip(this)">1h before</div>
+                <div class="assign-chip" data-value="1440" onclick="toggleRemindChip(this)">1d before</div>
+                <div class="assign-chip" data-value="4320" onclick="toggleRemindChip(this)">3d before</div>
+                <div class="assign-chip" data-value="10080" onclick="toggleRemindChip(this)">1w before</div>
+            </div>
+            <div style="font-size:11px;color:#98a2b3;margin-top:2px">Tap to select multiple reminder times</div>
             <select id="newTaskRecur">
                 <option value="none">No repeat</option>
                 <option value="daily">Daily</option>
@@ -512,6 +512,13 @@
                 <div class="assign-chip" data-name="Rachel" onclick="toggleAssign(this)">Rachel</div>
                 <div class="assign-chip" data-name="Sam" onclick="toggleAssign(this)">Sam</div>
             </div>
+            <div id="newRemRemindChips" class="assign-multi">
+                <div class="assign-chip" data-value="60" onclick="toggleRemindChip(this)">1h before</div>
+                <div class="assign-chip" data-value="1440" onclick="toggleRemindChip(this)">1d before</div>
+                <div class="assign-chip" data-value="4320" onclick="toggleRemindChip(this)">3d before</div>
+                <div class="assign-chip" data-value="10080" onclick="toggleRemindChip(this)">1w before</div>
+            </div>
+            <div style="font-size:11px;color:#98a2b3;margin-top:2px">Tap to select multiple reminder times</div>
         </div>
     </div>
 </div>
@@ -716,13 +723,13 @@
             </div>
             <div style="flex:1;min-width:120px" id="editRemindGroup">
                 <label style="font-size:12px;color:#98a2b3;display:block;margin-bottom:3px">Remind me</label>
-                <select id="editRemindBefore" style="width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px">
-                    <option value="0">At due time</option>
-                    <option value="60">1 hour before</option>
-                    <option value="1440">1 day before</option>
-                    <option value="4320">3 days before</option>
-                    <option value="10080">1 week before</option>
-                </select>
+                <div id="editRemindChips" class="assign-multi">
+                    <div class="assign-chip" data-value="60" onclick="toggleRemindChip(this)">1h before</div>
+                    <div class="assign-chip" data-value="1440" onclick="toggleRemindChip(this)">1d before</div>
+                    <div class="assign-chip" data-value="4320" onclick="toggleRemindChip(this)">3d before</div>
+                    <div class="assign-chip" data-value="10080" onclick="toggleRemindChip(this)">1w before</div>
+                </div>
+                <div style="font-size:10px;color:#98a2b3;margin-top:1px">Tap to select multiple</div>
             </div>
         </div>
         <div class="modal-actions" style="margin-top:12px">
@@ -767,15 +774,31 @@ function toggleAssign(el) {
     el.classList.toggle('selected');
 }
 
+function toggleRemindChip(el) {
+    el.classList.toggle('selected');
+}
+
 function getAssignValue(containerId) {
     const chips = document.querySelectorAll('#' + containerId + ' .assign-chip.selected');
     return Array.from(chips).map(c => c.dataset.name).join(',');
+}
+
+function getRemindValue(containerId) {
+    const chips = document.querySelectorAll('#' + containerId + ' .assign-chip.selected');
+    return Array.from(chips).map(c => c.dataset.value).join(',');
 }
 
 function setAssignValue(containerId, value) {
     const names = value ? value.split(',').map(s => s.trim()) : [];
     document.querySelectorAll('#' + containerId + ' .assign-chip').forEach(c => {
         c.classList.toggle('selected', names.includes(c.dataset.name));
+    });
+}
+
+function setRemindValue(containerId, value) {
+    const vals = value ? value.split(',').map(s => s.trim()) : [];
+    document.querySelectorAll('#' + containerId + ' .assign-chip').forEach(c => {
+        c.classList.toggle('selected', vals.includes(c.dataset.value));
     });
 }
 
@@ -1064,22 +1087,25 @@ async function addTask() {
         const startVal = document.getElementById('newReminderStart').value;
         const endVal = document.getElementById('newReminderEnd').value;
         const assigned = getAssignValue('newReminderAssigned');
+        const remindTimes = getRemindValue('newRemRemindChips');
         if (!startVal) { showToast('Please pick a start date'); return; }
         await api('POST', '/api/tasks', {
             title, description, assigned_to: assigned,
             start_at: startVal,
             due_at: endVal || startVal,
             end_at: endVal || null,
-            is_reminder: true
+            is_reminder: true,
+            remind_times: remindTimes
         });
     } else {
         const dueInput = document.getElementById('newTaskDue').value;
         const recurrence = document.getElementById('newTaskRecur').value;
         const priority = document.getElementById('newTaskPriority').value || 'medium';
         const assigned = getAssignValue('newTaskAssigned');
+        const remindTimes = getRemindValue('newRemindChips');
         let due_at = null;
         if (dueInput) { due_at = new Date(dueInput).toISOString(); }
-        await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, assigned_to: assigned, remind_before: parseInt(document.getElementById('newTaskRemindBefore').value) || 0 });
+        await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, assigned_to: assigned, remind_times: remindTimes });
     }
     document.getElementById('newTaskTitle').value='';
     document.getElementById('newTaskDesc').value='';
@@ -1473,7 +1499,6 @@ function openEditTask(id) {
             document.getElementById('editDue').value = '';
         }
         document.getElementById('editRecur').value = task.recurrence || 'none';
-        document.getElementById('editRemindBefore').value = task.remind_before || 0;
     } else {
         if (task.start_at) {
             try { document.getElementById('editStart').value = task.start_at.slice(0,10); }
@@ -1489,6 +1514,7 @@ function openEditTask(id) {
         }
     }
     setAssignValue('editCategory', task.assigned_to || '');
+    setRemindValue('editRemindChips', task.remind_times || '');
     document.getElementById('editModal').classList.add('show');
 }
 
@@ -1505,7 +1531,8 @@ async function saveEditTask() {
     const title = document.getElementById('editTitle').value.trim();
     const description = document.getElementById('editDesc').value.trim();
     const category = getAssignValue('editCategory');
-    let updateData = { title, description, assigned_to: category };
+    const remindTimes = getRemindValue('editRemindChips');
+    let updateData = { title, description, assigned_to: category, remind_times: remindTimes };
     if (isReminder) {
         const startVal = document.getElementById('editStart').value;
         const endVal = document.getElementById('editEnd').value;
@@ -1521,7 +1548,6 @@ async function saveEditTask() {
         updateData.priority = priority;
         updateData.recurrence = recurrence;
         updateData.due_at = due_at;
-        updateData.remind_before = parseInt(document.getElementById('editRemindBefore').value) || 0;
     }
     await api('PUT', '/api/tasks/' + editTaskId, updateData);
     closeEditModal();
