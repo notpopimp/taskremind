@@ -410,6 +410,22 @@ def receive_signal(body: SignalRequest):
     print(f"[SIGNAL] {raw}")
     return {"ok": True}
 
+SIGNAL_POINTER = 0
+
+@app.get("/api/signals/pending")
+def get_pending_signals():
+    """Returns new signals since last poll."""
+    global SIGNAL_POINTER
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, raw_text, received_at FROM signals WHERE id > %s ORDER BY id", (SIGNAL_POINTER,))
+    rows = cur.fetchall()
+    if rows:
+        SIGNAL_POINTER = rows[-1]["id"]
+    cur.close()
+    conn.close()
+    return {"signals": [dict(r) for r in rows]}
+
 @app.post("/api/logout")
 def logout():
     resp = JSONResponse({"ok": True})
