@@ -263,8 +263,6 @@
         .task-actions button:hover { background: #e2e6ea; }
         .task-actions .delete { color: #e53935; }
 
-        .cal-view { margin: 0 16px; display: none; }
-        .cal-view.show { display: block; }
         .cal-header {
             display: flex; justify-content: space-between; align-items: center;
             background: white; padding: 12px 16px; border-radius: 12px;
@@ -276,41 +274,6 @@
             padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 16px;
         }
         .cal-nav:hover { background: rgba(65,101,225,0.06); }
-        .cal-grid {
-            display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
-            background: white; border-radius: 12px; overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-        .cal-day-header {
-            background: #f8f9fc; padding: 10px 0; text-align: center;
-            font-size: 12px; font-weight: 600; color: #98a2b3;
-        }
-        .cal-day {
-            background: white; min-height: 80px; padding: 4px;
-            text-align: center; cursor: pointer; position: relative;
-            transition: background 0.15s; font-size: 12px;
-        }
-        .cal-day:hover { background: #f8f9fc; }
-        .cal-day.other-month { opacity: 0.3; }
-        .cal-day.today .day-num {
-            background: #4165e1; color: white; border-radius: 50%;
-            width: 24px; height: 24px; display: inline-flex;
-            align-items: center; justify-content: center;
-        }
-        .day-num { font-size: 13px; font-weight: 500; padding: 2px; }
-        .cal-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; margin-top: 2px; }
-        .cal-dot { width: 5px; height: 5px; border-radius: 50%; }
-        .cal-dot.overdue { background: #e53935; }
-        .cal-dot.today-due { background: #4165e1; }
-        .cal-dot.soon-due { background: #fb8c00; }
-        .cal-note-indicator { font-size: 9px; margin-top: 1px; color: #7c4dff; line-height: 1; }
-
-        .day-detail {
-            display: none; background: white; border-radius: 12px;
-            padding: 16px; margin-top: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .day-detail.show { display: block; }
-        .day-detail h3 { font-size: 15px; margin-bottom: 8px; color: #4165e1; }
         /* Big Calendar */
         .big-cal-grid {
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
