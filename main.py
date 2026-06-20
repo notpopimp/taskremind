@@ -1147,6 +1147,9 @@ def get_stats(request: Request):
         ORDER BY u.username
     """, (now_str,))
     per_user = [dict(r) for r in cur.fetchall()]
+    # Only show Ben, Rachel, Sam in per-user stats
+    allowed = {"Ben", "Rachel", "Sam"}
+    per_user = [u for u in per_user if u["username"] in allowed]
     
     cur.close()
     conn.close()
