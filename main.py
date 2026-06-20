@@ -214,26 +214,19 @@ def init_db():
 
 # ---------- Seed the 3 Waypoint users ----------
 SEED_USERS = {
-    "Ben":  {"pin": "0000", "role": "admin"},
-    "Rachel": {"pin": "0000", "role": "user"},
-    "Sam":   {"pin": "0000", "role": "user"},
+    "Ben":  {"pin": "4892", "role": "admin"},
+    "Rachel": {"pin": "7315", "role": "user"},
+    "Sam":   {"pin": "2648", "role": "user"},
 }
 
 def seed_users():
-    """Ensure Ben, Rachel, and Sam exist with PIN 0000."""
+    """Create missing users only — never overwrite existing PINs."""
     conn = get_db()
     cur = conn.cursor()
     for name, info in SEED_USERS.items():
         cur.execute("SELECT id FROM users WHERE username = %s", (name,))
         existing = cur.fetchone()
-        if existing:
-            # Force PIN to 0000 for existing users
-            cur.execute(
-                "UPDATE users SET pin_hash = %s, role = %s WHERE username = %s",
-                (hash_pin(info["pin"]), info["role"], name),
-            )
-            print(f"  ✓ Updated PIN for {name}")
-        else:
+        if not existing:
             user_id = uuid.uuid4().hex[:12]
             cur.execute(
                 "INSERT INTO users (id, username, pin_hash, created_at, role) VALUES (%s, %s, %s, %s, %s)",
@@ -410,21 +403,33 @@ def receive_signal(body: SignalRequest):
     print(f"[SIGNAL] {raw}")
     return {"ok": True}
 
-SIGNAL_POINTER = 0
-
 @app.get("/api/signals/pending")
 def get_pending_signals():
-    """Returns new signals since last poll."""
-    global SIGNAL_POINTER
+    """Returns signals not yet delivered."""
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, raw_text, received_at FROM signals WHERE id > %s ORDER BY id", (SIGNAL_POINTER,))
+    cur.execute("SELECT id, raw_text, received_at FROM signals WHERE delivered = FALSE ORDER BY id")
     rows = cur.fetchall()
-    if rows:
-        SIGNAL_POINTER = rows[-1]["id"]
     cur.close()
     conn.close()
     return {"signals": [dict(r) for r in rows]}
+
+@app.post("/api/signals/ack")
+def ack_signals(body: dict):
+    """Mark signals as delivered after the cron job processes them."""
+    ids = body.get("ids", [])
+    if not ids:
+        return {"ok": True}
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE signals SET delivered = TRUE WHERE id = ANY(%s)",
+        (ids,),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"ok": True}
 
 @app.post("/api/logout")
 def logout():
