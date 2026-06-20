@@ -146,6 +146,13 @@ def init_db():
             UNIQUE(user_id, endpoint)
         )
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS signals (
+            id SERIAL PRIMARY KEY,
+            raw_text TEXT NOT NULL,
+            received_at TEXT NOT NULL
+        )
+    """)
     # Add user columns if upgrading
     for col, dtype in [("role", "TEXT DEFAULT 'user'"),
                        ("phone", "TEXT DEFAULT ''"), ("email", "TEXT DEFAULT ''")]:
@@ -382,6 +389,26 @@ def login(body: LoginRequest):
 @app.post("/api/register")
 def register(body: RegisterRequest):
     raise HTTPException(403, "Registration is closed. Waypoint has 3 members: Ben, Rachel, and Sam.")
+
+@app.post("/api/signal")
+def receive_signal(request: Request):
+    """Webhook endpoint for Tasker to forward Discord signals."""
+    try:
+        body = request.json()
+    except Exception:
+        body = {}
+    raw = body.get("text") or body.get("raw") or str(body)
+    conn = get_db()
+    cur = conn.cursor()
+    from datetime import datetime
+    cur.execute(
+        "INSERT INTO signals (raw_text, received_at) VALUES (%s, %s)",
+        (raw, datetime.utcnow().isoformat()),
+    )
+    cur.close()
+    conn.close()
+    print(f"[SIGNAL] {raw}")
+    return {"ok": True}
 
 @app.post("/api/logout")
 def logout():
