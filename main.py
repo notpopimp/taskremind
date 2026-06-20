@@ -480,6 +480,49 @@ def update_profile(request: Request, body: dict):
     conn.close()
     return {"ok": True}
 
+class ChangePinRequest(BaseModel):
+    current_pin: str
+    new_pin: str
+
+@app.post("/api/change-pin")
+def change_pin(request: Request, body: ChangePinRequest):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT pin_hash FROM users WHERE id = %s", (uid,))
+    user = cur.fetchone()
+    if not user:
+        cur.close()
+        conn.close()
+        raise HTTPException(404, "User not found")
+    if user["pin_hash"] != hash_pin(body.current_pin):
+        cur.close()
+        conn.close()
+        raise HTTPException(400, "Current PIN is incorrect")
+    cur.execute("UPDATE users SET pin_hash = %s WHERE id = %s", (hash_pin(body.new_pin), uid))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
+@app.post("/api/admin/set-pin")
+def admin_set_pin(request: Request, body: dict):
+    uid = get_user(request)
+    require_admin(uid)
+    target_user = body.get("user_id", "")
+    new_pin = body.get("new_pin", "")
+    if not target_user or not new_pin:
+        raise HTTPException(400, "user_id and new_pin required")
+    if len(new_pin) != 4 or not new_pin.isdigit():
+        raise HTTPException(400, "PIN must be 4 digits")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET pin_hash = %s WHERE id = %s", (hash_pin(new_pin), target_user))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
 # ---------- User Management ----------
 @app.get("/api/users")
 def list_users(request: Request):
