@@ -390,14 +390,14 @@ def login(body: LoginRequest):
 def register(body: RegisterRequest):
     raise HTTPException(403, "Registration is closed. Waypoint has 3 members: Ben, Rachel, and Sam.")
 
+class SignalRequest(BaseModel):
+    text: str = ""
+    raw: str = ""
+
 @app.post("/api/signal")
-def receive_signal(request: Request):
+def receive_signal(body: SignalRequest):
     """Webhook endpoint for Tasker to forward Discord signals."""
-    try:
-        body = request.json()
-    except Exception:
-        body = {}
-    raw = body.get("text") or body.get("raw") or str(body)
+    raw = body.text or body.raw or str(body)
     conn = get_db()
     cur = conn.cursor()
     from datetime import datetime
