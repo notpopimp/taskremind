@@ -311,6 +311,50 @@
         }
         .day-detail.show { display: block; }
         .day-detail h3 { font-size: 15px; margin-bottom: 8px; color: #4165e1; }
+        /* Big Calendar */
+        .big-cal-grid {
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
+            background: white; border-radius: 14px; overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .big-cal-day-header {
+            background: #f0f2f5; padding: 8px 0; text-align: center;
+            font-size: 13px; font-weight: 600; color: #667788;
+        }
+        .big-cal-day {
+            background: white; min-height: 90px; padding: 3px;
+            cursor: pointer; position: relative; font-size: 11px;
+            border-bottom: 1px solid #f0f2f5; border-right: 1px solid #f0f2f5;
+            transition: background 0.15s; overflow: hidden;
+            text-align: left; vertical-align: top;
+        }
+        .big-cal-day:nth-child(7n) { border-right: none; }
+        .big-cal-day:hover { background: #f8f9fc; }
+        .big-cal-day.other-month { opacity: 0.25; }
+        .big-cal-day.today { background: #eef4ff; }
+        .big-cal-day .bday-num {
+            font-size: 13px; font-weight: 600; color: #1a1a2e;
+            width: 22px; height: 22px; display: inline-flex;
+            align-items: center; justify-content: center;
+            margin-bottom: 2px;
+        }
+        .big-cal-day.today .bday-num {
+            background: #4165e1; color: white; border-radius: 50%;
+        }
+        .bcal-item {
+            font-size: 10px; line-height: 1.3; padding: 1px 3px;
+            margin-bottom: 1px; border-radius: 3px; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+        }
+        .bcal-item.task-item { background: rgba(65,101,225,0.08); color: #4165e1; }
+        .bcal-item.reminder-item { background: rgba(251,140,0,0.1); color: #e65100; }
+        .bcal-item.absence-item { background: rgba(46,204,113,0.1); color: #27ae60; }
+        .bcal-item.calloff-item { background: rgba(229,57,53,0.1); color: #c62828; }
+        .bcal-item.overdue-item { background: rgba(229,57,53,0.15); color: #c62828; }
+        .bcal-more {
+            font-size: 9px; color: #4165e1; font-weight: 500;
+            padding: 1px 3px; cursor: pointer;
+        }
         .day-note-box {
             margin: 8px 0; display: flex; gap: 6px;
         }
@@ -455,6 +499,26 @@
     </div>
 </div>
 
+<!-- Collapsible Calendar Banner -->
+<div id="calToggleBar" onclick="toggleCalendar()" style="margin:8px 12px 0 12px;padding:10px 16px;background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none">
+    <span style="font-size:15px;font-weight:600;color:#1a1a2e">📅 <span id="calToggleTitle">Calendar</span></span>
+    <span id="calToggleArrow" style="font-size:18px;color:#4165e1;transition:transform 0.2s">▶</span>
+</div>
+
+<!-- Large Expandable Calendar -->
+<div id="bigCalendar" style="display:none;margin:4px 12px 0 12px">
+    <div class="cal-header" style="margin-bottom:4px">
+        <button class="cal-nav" onclick="calMove(-1)">&#9664;</button>
+        <h2 id="calTitle" style="font-size:18px">January 2026</h2>
+        <button class="cal-nav" onclick="calMove(1)">&#9654;</button>
+    </div>
+    <div class="big-cal-grid" id="bigCalGrid"></div>
+    <div class="day-detail" id="bigDayDetail" style="display:none;margin-top:6px">
+        <h3 id="bigDayDetailTitle" style="font-size:14px;margin-bottom:6px;color:#4165e1"></h3>
+        <div id="bigDayDetailList"></div>
+    </div>
+</div>
+
 <div class="reminder-banner" id="reminderBanner"></div>
 
 <!-- Toolbar -->
@@ -523,11 +587,6 @@
     </div>
 </div>
 
-<div class="view-toggle">
-    <button class="view-btn active" onclick="switchView('list',this)">List</button>
-    <button class="view-btn" onclick="switchView('calendar',this)">Calendar</button>
-</div>
-
 <!-- List -->
 <div id="listView">
     <div class="tabs">
@@ -539,24 +598,6 @@
     <div class="task-list-view" id="timeoffList" style="display:none"></div>
     <div class="task-list-view" id="attendanceView" style="display:none"></div>
 </div>
-<!-- Calendar -->
-<div class="cal-view" id="calendarView">
-    <div class="cal-header">
-        <button class="cal-nav" onclick="calMove(-1)">&#9664;</button>
-        <h2 id="calTitle">January 2026</h2>
-        <button class="cal-nav" onclick="calMove(1)">&#9654;</button>
-    </div>
-    <div class="cal-grid" id="calGrid"></div>
-    <div class="day-detail" id="dayDetail">
-        <h3 id="dayDetailTitle">Tasks</h3>
-        <div class="day-note-box">
-            <textarea id="dayNoteInput" placeholder="Notes for this day..."></textarea>
-            <button onclick="saveDayNote()">Save</button>
-        </div>
-        <div id="dayDetailList"></div>
-    </div>
-</div>
-
 <!-- Share -->
 <div class="share-panel" id="sharePanel" style="display:none;">
     <h3>Share Your Task List</h3>
@@ -744,7 +785,6 @@
 <script>
 let tasks = [];
 let currentTab = 'tasks';
-let currentView = 'list';
 let calYear = 0, calMonth = 0;
 let pendingCompleteId = null;
 let notesWithContent = new Set();
@@ -764,7 +804,6 @@ async function loadTasks() {
     notesWithContent = new Set(await api('GET', '/api/notes'));
     try { currentUser = await api('GET', '/api/me'); } catch(e) {}
     renderTasks();
-    if (currentView==='calendar') renderCalendar();
     checkReminders();
 }
 
@@ -948,26 +987,37 @@ function switchTab(tab, btn) {
     }
 }
 
-function switchView(view, btn) {
-    currentView = view;
-    document.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    document.getElementById('listView').style.display = view==='list' ? 'block' : 'none';
-    document.getElementById('calendarView').classList.toggle('show', view==='calendar');
-    if (view==='calendar') { const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); renderCalendar(); }
+/* Calendar toggle */
+function toggleCalendar() {
+    const cal = document.getElementById('bigCalendar');
+    const arrow = document.getElementById('calToggleArrow');
+    const isHidden = cal.style.display === 'none';
+    cal.style.display = isHidden ? 'block' : 'none';
+    arrow.style.transform = isHidden ? 'rotate(90deg)' : '';
+    arrow.textContent = isHidden ? '▼' : '▶';
+    if (isHidden) {
+        const n = new Date();
+        calYear = n.getFullYear();
+        calMonth = n.getMonth();
+        renderCalendar();
+    }
 }
 
-/* Calendar */
+/* Big Calendar */
 function renderCalendar() {
-    const grid = document.getElementById('calGrid');
+    const grid = document.getElementById('bigCalGrid');
+    if (!grid) return;
     document.getElementById('calTitle').textContent = new Date(calYear, calMonth).toLocaleString('en-US',{month:'long',year:'numeric'});
+    document.getElementById('calToggleTitle').textContent = new Date(calYear, calMonth).toLocaleString('en-US',{month:'long',year:'numeric'});
     const firstDay = new Date(calYear, calMonth, 1).getDay();
     const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
     const today = new Date();
     const todayStr = today.toISOString().slice(0,10);
     const nowISO = today.toISOString();
-    const threeHoursMs = 10800000;
+
+    // Build day map: tasks + absences
     const dayMap = {};
+    // Tasks
     tasks.forEach(t => {
         if (t.completed) return;
         if (t.is_reminder && t.start_at && t.end_at) {
@@ -978,38 +1028,64 @@ function renderCalendar() {
             while (d <= e) {
                 const ds = d.toISOString().slice(0,10);
                 if (!dayMap[ds]) dayMap[ds] = [];
-                dayMap[ds].push(t);
+                dayMap[ds].push({type:'reminder', title: t.title, id: t.id, task: t});
                 d.setDate(d.getDate()+1);
             }
         } else if (t.due_at) {
             const d = t.due_at.slice(0,10);
             if (!dayMap[d]) dayMap[d] = [];
-            dayMap[d].push(t);
+            const isOd = t.due_at < nowISO && !t.completed;
+            dayMap[d].push({type: 'task', title: t.title, id: t.id, isOverdue: isOd, task: t});
         }
     });
-    let html = '<div class="cal-day-header">Sun</div><div class="cal-day-header">Mon</div><div class="cal-day-header">Tue</div><div class="cal-day-header">Wed</div><div class="cal-day-header">Thu</div><div class="cal-day-header">Fri</div><div class="cal-day-header">Sat</div>';
+    // Absences from cached absences
+    if (window.cachedAbsences) {
+        cachedAbsences.forEach(a => {
+            if (!a.date) return;
+            const start = a.date.slice(0,10);
+            const end = a.end_date ? a.end_date.slice(0,10) : start;
+            let d = new Date(start);
+            const e = new Date(end);
+            while (d <= e) {
+                const ds = d.toISOString().slice(0,10);
+                if (!dayMap[ds]) dayMap[ds] = [];
+                const icon = a.type === 'call_off' ? '🚑' : '🏖';
+                const cls = a.type === 'call_off' ? 'calloff-item' : 'absence-item';
+                dayMap[ds].push({type: 'absence', title: icon + ' ' + a.absence_user, id: a.id, cls: cls});
+                d.setDate(d.getDate()+1);
+            }
+        });
+    }
+
+    let html = '<div class="big-cal-day-header">Sun</div><div class="big-cal-day-header">Mon</div><div class="big-cal-day-header">Tue</div><div class="big-cal-day-header">Wed</div><div class="big-cal-day-header">Thu</div><div class="big-cal-day-header">Fri</div><div class="big-cal-day-header">Sat</div>';
     const prevMd = new Date(calYear, calMonth, 0).getDate();
-    for (let i=firstDay-1; i>=0; i--) { html+='<div class="cal-day other-month"><div class="day-num">'+(prevMd-i)+'</div></div>'; }
+    for (let i=firstDay-1; i>=0; i--) {
+        html+='<div class="big-cal-day other-month"><div class="bday-num">'+(prevMd-i)+'</div></div>';
+    }
     for (let d=1; d<=daysInMonth; d++) {
         const dateStr = calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
         const isToday = dateStr===todayStr;
-        const dayTasks = dayMap[dateStr] || [];
-        let dotHtml = '';
-        dayTasks.forEach(t => {
-            let cls = 'today-due';
-            if (t.due_at < nowISO) cls='overdue';
-            else if (new Date(t.due_at).getTime() < Date.now()+threeHoursMs) cls='soon-due';
-            dotHtml += '<div class="cal-dot '+cls+'"></div>';
-        });
-        const hasNote = notesWithContent.has(dateStr);
-        html += '<div class="cal-day'+(isToday?' today':'')+'" onclick="showDayTasks(\''+dateStr+'\')">'+
-            '<div class="day-num">'+d+'</div>'+
-            '<div class="cal-dots">'+dotHtml+'</div>'+
-            (hasNote ? '<div class="cal-note-indicator">N</div>' : '')+
+        const items = dayMap[dateStr] || [];
+        let itemsHtml = '';
+        const maxShow = 3;
+        const showCount = Math.min(items.length, maxShow);
+        for (let i=0; i<showCount; i++) {
+            const item = items[i];
+            let cls = 'bcal-item';
+            if (item.type === 'absence') cls += ' ' + (item.cls || 'absence-item');
+            else if (item.type === 'reminder') cls += ' reminder-item';
+            else if (item.isOverdue) cls += ' overdue-item';
+            else cls += ' task-item';
+            itemsHtml += '<div class="' + cls + '" onclick="event.stopPropagation();showDayPopup(\'' + dateStr + '\')">' + item.title + '</div>';
+        }
+        const more = items.length > maxShow ? '<div class="bcal-more" onclick="event.stopPropagation();showDayPopup(\'' + dateStr + '\')">+' + (items.length - maxShow) + ' more</div>' : '';
+        html += '<div class="big-cal-day' + (isToday ? ' today' : '') + '" onclick="showDayPopup(\'' + dateStr + '\')">' +
+            '<div class="bday-num">' + d + '</div>' +
+            itemsHtml + more +
         '</div>';
     }
     const total=firstDay+daysInMonth; const rem=(7-(total%7))%7;
-    for (let d=1; d<=rem; d++) html+='<div class="cal-day other-month"><div class="day-num">'+d+'</div></div>';
+    for (let d=1; d<=rem; d++) html+='<div class="big-cal-day other-month"><div class="bday-num">'+d+'</div></div>';
     grid.innerHTML = html;
 }
 
@@ -1018,48 +1094,51 @@ function calMove(dir) {
     if (calMonth<0) { calMonth=11; calYear--; }
     if (calMonth>11) { calMonth=0; calYear++; }
     renderCalendar();
-    document.getElementById('dayDetail').classList.remove('show');
+    document.getElementById('bigDayDetail').style.display = 'none';
 }
 
-async function showDayTasks(dateStr) {
-    const detail = document.getElementById('dayDetail');
+async function showDayPopup(dateStr) {
+    const detail = document.getElementById('bigDayDetail');
     const d = new Date(dateStr+'T12:00:00');
-    document.getElementById('dayDetailTitle').textContent = 'Tasks for '+d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-    const note = await api('GET', '/api/notes/'+dateStr);
-    const input = document.getElementById('dayNoteInput');
-    input.value = note.content||'';
-    input.dataset.date = dateStr;
-    const dayTasks = tasks.filter(t => {
-        if (t.completed) return false;
-        if (!t.due_at) return false;
+    document.getElementById('bigDayDetailTitle').textContent = '📅 ' + d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+    const dayItems = [];
+    tasks.forEach(t => {
+        if (t.completed) return;
+        if (!t.due_at) return;
         const taskDate = t.due_at.slice(0,10);
         if (t.is_reminder && t.start_at) {
-            return dateStr >= t.start_at.slice(0,10) && dateStr <= taskDate;
+            if (dateStr >= t.start_at.slice(0,10) && dateStr <= taskDate) dayItems.push(t);
+        } else if (taskDate === dateStr) {
+            dayItems.push(t);
         }
-        return taskDate === dateStr;
     });
-    const list = document.getElementById('dayDetailList');
-    if (dayTasks.length===0) {
-        list.innerHTML = '<div style="color:#98a2b3;padding:10px;text-align:center;">No tasks for this day</div>';
+    // Include absences
+    if (window.cachedAbsences) {
+        cachedAbsences.forEach(a => {
+            if (!a.date) return;
+            const start = a.date.slice(0,10);
+            const end = a.end_date ? a.end_date.slice(0,10) : start;
+            if (dateStr >= start && dateStr <= end) dayItems.push({id: a.id, title: '🏖 ' + a.absence_user + (a.type === 'call_off' ? ' (Call off)' : ' (Time off)'), description: a.reason || '', is_reminder: false, due_at: null, completed: true, assigned_to: a.covered_by || ''});
+        });
+    }
+    const list = document.getElementById('bigDayDetailList');
+    if (dayItems.length===0) {
+        list.innerHTML = '<div style="color:#98a2b3;padding:10px;text-align:center;font-size:13px">Nothing on this day</div>';
     } else {
-        list.innerHTML = dayTasks.map(t => {
-            let ts='';
-            if (t.due_at) { try { ts=new Date(t.due_at.endsWith('Z')?t.due_at:t.due_at+'Z').toLocaleString(); } catch(e) { ts=t.due_at; } }
-            return '<div class="day-task"><div class="dt-check done" onclick="startComplete(\''+t.id+'\')"></div>'+
-                '<div class="dt-info"><div class="dt-title">'+esc(t.title)+'</div><div class="dt-time">'+ts+'</div></div></div>';
+        list.innerHTML = dayItems.map(t => {
+            const isOverdue = !t.completed && t.due_at && t.due_at < new Date().toISOString();
+            const title = (t.is_reminder ? '🔔 ' : (t.title && t.title.startsWith('🏖') ? '' : '📋 ')) + esc(t.title);
+            const cl = t.assigned_to || '';
+            return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:white;border:1px solid #e2e6ea;border-radius:8px;margin-bottom:4px">' +
+                '<div style="flex:1;min-width:0">' +
+                    '<div style="font-size:13px;font-weight:500;color:' + (isOverdue ? '#e53935' : '#1a1a2e') + '">' + title + '</div>' +
+                    (t.description ? '<div style="font-size:11px;color:#98a2b3">' + esc(t.description) + '</div>' : '') +
+                    (cl ? '<div style="font-size:10px;color:#667788;margin-top:2px">' + esc(cl) + '</div>' : '') +
+                '</div>' +
+            '</div>';
         }).join('');
     }
-    detail.classList.add('show');
-}
-
-async function saveDayNote() {
-    const input = document.getElementById('dayNoteInput');
-    const date = input.dataset.date;
-    if (!date) return;
-    await api('PUT', '/api/notes/'+date, { content: input.value });
-    showToast('Note saved');
-    notesWithContent = new Set(await api('GET', '/api/notes'));
-    renderCalendar();
+    detail.style.display = 'block';
 }
 
 /* Type toggle */
@@ -1325,6 +1404,7 @@ async function loadAbsences() {
     const container = document.getElementById('timeoffList');
     try {
         const absences = await api('GET', '/api/absences');
+        window.cachedAbsences = absences;
         let html = '<div style="margin-bottom:10px"><button onclick="addAbsenceForm()" style="padding:10px 20px;background:#4165e1;border:none;border-radius:10px;color:white;font-weight:600;cursor:pointer;width:100%">+ Add Absence</button></div>';
         html += '<div id="absenceForm" style="display:none;background:#f8f9fc;border-radius:12px;padding:14px;margin-bottom:12px"></div>';
         if (!absences.length) {
