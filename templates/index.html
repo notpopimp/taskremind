@@ -1350,12 +1350,7 @@ function addAbsenceForm() {
     formContainer.style.display = 'block';
     formContainer.innerHTML =
         '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
-            '<select id="absencePerson" style="flex:1;min-width:100px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
-                '<option value="">Person...</option>' +
-                '<option value="Ben">Ben</option>' +
-                '<option value="Rachel">Rachel</option>' +
-                '<option value="Sam">Sam</option>' +
-            '</select>' +
+            '<input type="text" id="absencePerson" placeholder="Person..." style="flex:1;min-width:100px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
             '<input type="date" id="absenceDate" style="flex:1;min-width:120px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
             '<input type="date" id="absenceEndDate" placeholder="End date (optional)" style="flex:1;min-width:120px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
         '</div>' +
@@ -1364,12 +1359,7 @@ function addAbsenceForm() {
                 '<option value="time_off">🏖 Time off</option>' +
                 '<option value="call_off">🚑 Call off</option>' +
             '</select>' +
-            '<select id="absenceCoveredBy" style="flex:1;min-width:100px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
-                '<option value="">Covered by...</option>' +
-                '<option value="Ben">Ben</option>' +
-                '<option value="Rachel">Rachel</option>' +
-                '<option value="Sam">Sam</option>' +
-            '</select>' +
+            '<input type="text" id="absenceCoveredBy" placeholder="Covered by..." style="flex:1;min-width:100px;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px">' +
         '</div>' +
         '<div style="margin-bottom:8px">' +
             '<textarea id="absenceReason" placeholder="Reason..." maxlength="200" style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px;resize:vertical;min-height:40px;font-family:inherit;box-sizing:border-box"></textarea>' +
