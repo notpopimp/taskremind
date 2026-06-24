@@ -983,9 +983,9 @@ function renderCalendar() {
     // Tasks
     tasks.forEach(t => {
         if (t.completed) return;
-        if (t.is_reminder && t.start_at && t.end_at) {
+        if (t.is_reminder && t.start_at) {
             const start = t.start_at.slice(0,10);
-            const end = t.end_at.slice(0,10);
+            const end = t.end_at ? t.end_at.slice(0,10) : start;
             let d = new Date(start);
             const e = new Date(end);
             while (d <= e) {
@@ -1070,7 +1070,7 @@ async function showDayPopup(dateStr) {
         if (!t.due_at) return;
         const taskDate = t.due_at.slice(0,10);
         if (t.is_reminder && t.start_at) {
-            if (dateStr >= t.start_at.slice(0,10) && dateStr <= taskDate) dayItems.push(t);
+            if (dateStr >= t.start_at.slice(0,10) && dateStr <= (t.end_at ? t.end_at.slice(0,10) : t.due_at ? t.due_at.slice(0,10) : t.start_at.slice(0,10))) dayItems.push(t);
         } else if (taskDate === dateStr) {
             dayItems.push(t);
         }
