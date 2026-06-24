@@ -8,7 +8,7 @@ from pathlib import Path
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -114,7 +114,7 @@ def init_db():
                        ("is_reminder", "INTEGER DEFAULT 0"), ("end_at", "TEXT DEFAULT NULL"),
                        ("start_at", "TEXT DEFAULT NULL"), ("remind_before", "INTEGER DEFAULT 0"),
                        ("last_reminded_at", "TEXT DEFAULT NULL"), ("in_progress", "INTEGER DEFAULT 0"),
-                       ("remind_times", "TEXT DEFAULT ''")]:
+                       ("remind_times", "TEXT DEFAULT ''"), ("image_url", "TEXT DEFAULT ''"), ("image_data", "TEXT DEFAULT ''"), ("image_expires_at", "TEXT DEFAULT NULL")]:
         cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.columns
             WHERE table_name='tasks' AND column_name='{col}'
@@ -1442,6 +1442,93 @@ def export_tasks(request: Request, fmt: str = "json"):
         return Response(content=buf.getvalue(), media_type="text/csv",
                         headers={"Content-Disposition": f"attachment; filename={fname}"})
     return rows
+
+# ---------- Image Upload Routes ----------
+import base64
+from datetime import datetime, timedelta
+
+IMAGE_RETENTION_DAYS = int(os.environ.get("IMAGE_RETENTION_DAYS", "30"))
+MAX_IMAGE_SIZE_MB = int(os.environ.get("MAX_IMAGE_SIZE_MB", "5"))
+
+def cleanup_expired_images():
+    """Remove image data from tasks where image_expires_at has passed"""
+    conn = get_db()
+    cur = conn.cursor()
+    now = datetime.utcnow().isoformat()
+    cur.execute(
+        "UPDATE tasks SET image_data = '', image_expires_at = NULL WHERE image_expires_at < %s AND image_data != ''",
+        (now,)
+    )
+    count = cur.rowcount
+    cur.close()
+    conn.close()
+    if count > 0:
+        print(f"Cleaned up {count} expired images")
+    return count
+
+@app.post("/api/tasks/{task_id}/image")
+async def upload_task_image(request: Request, task_id: str, file: UploadFile = File(...)):
+    uid = get_user(request)
+    
+    # Check file size
+    contents = await file.read()
+    size_mb = len(contents) / (1024 * 1024)
+    if size_mb > MAX_IMAGE_SIZE_MB:
+        raise HTTPException(413, f"Image too large: {size_mb:.1f}MB (max {MAX_IMAGE_SIZE_MB}MB)")
+    
+    # Encode to base64
+    encoded = base64.b64encode(contents).decode('utf-8')
+    mime_type = file.content_type or "image/jpeg"
+    data_url = f"data:{mime_type};base64,{encoded}"
+    
+    # Calculate expiration
+    expires_at = (datetime.utcnow() + timedelta(days=IMAGE_RETENTION_DAYS)).isoformat()
+    
+    # Update task
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM tasks WHERE id = %s AND user_id = %s", (task_id, uid))
+    task = cur.fetchone()
+    if not task:
+        cur.close()
+        conn.close()
+        raise HTTPException(404, "Task not found")
+    
+    cur.execute(
+        "UPDATE tasks SET image_data = %s, image_expires_at = %s WHERE id = %s",
+        (data_url, expires_at, task_id)
+    )
+    cur.close()
+    conn.close()
+    
+    return {"ok": True, "image_url": data_url, "expires_at": expires_at}
+
+@app.delete("/api/tasks/{task_id}/image")
+def delete_task_image(request: Request, task_id: str):
+    uid = get_user(request)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM tasks WHERE id = %s AND user_id = %s", (task_id, uid))
+    task = cur.fetchone()
+    if not task:
+        cur.close()
+        conn.close()
+        raise HTTPException(404, "Task not found")
+    
+    cur.execute(
+        "UPDATE tasks SET image_data = '', image_expires_at = NULL WHERE id = %s",
+        (task_id,)
+    )
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
+@app.get("/api/cleanup-images")
+def cleanup_images_endpoint(request: Request):
+    """Manual trigger for image cleanup (admin only or cron)"""
+    # Optional: add auth check here
+    count = cleanup_expired_images()
+    return {"ok": True, "cleaned": count}
 
 if __name__ == "__main__":
     import uvicorn

@@ -530,6 +530,16 @@
                 <option value="quarterly">Quarterly</option>
                 <option value="yearly">Yearly</option>
             </select>
+            <div style="width:100%;margin-top:6px">
+                <input type="file" id="newTaskImage" accept="image/*" style="display:none" onchange="handleImageSelect(this)">
+                <button onclick="document.getElementById('newTaskImage').click()" style="padding:8px 14px;background:#f0f2f5;border:1px solid #d0d5dd;border-radius:8px;color:#667788;font-size:13px;cursor:pointer;width:100%;text-align:left">
+                    📷 <span id="imageLabel">Add photo...</span>
+                </button>
+                <div id="imagePreview" style="display:none;margin-top:6px">
+                    <img id="previewImg" style="max-width:100%;max-height:150px;border-radius:8px">
+                    <button onclick="clearImage()" style="margin-top:4px;padding:4px 8px;background:#e53935;border:none;border-radius:6px;color:white;font-size:11px;cursor:pointer">Remove</button>
+                </div>
+            </div>
         </div>
         <div id="reminderFields" style="display:none">
             <input type="date" id="newReminderStart">
@@ -833,6 +843,12 @@ function renderTasks() {
     const labels = { none:'', daily:'Daily', weekly:'Weekly', biweekly:'Biweekly', monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly' };
 
     function renderTaskItem(t) {
+        // Build image HTML if present
+        let imageHtml = '';
+        if (t.image_data) {
+            imageHtml = '<div style="margin-top:8px"><img src="' + t.image_data + '" style="max-width:100%;max-height:200px;border-radius:8px;cursor:pointer" onclick="viewImage(this.src)"></div>';
+        }
+        
         // Reminders: simple info display, no status
         if (t.is_reminder) {
             let rangeStr = '';
@@ -852,6 +868,7 @@ function renderTasks() {
                 '<div class="task-info">' +
                     '<div class="task-title">🔔 ' + esc(t.title) + '</div>' +
                     (t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : '') +
+                    imageHtml +
                     (rangeStr ? '<div class="task-due' + (isReminderOverdue ? ' urgent' : '') + '">' + rangeStr + (isReminderOverdue ? ' OVERDUE' : '') + '</div>' : '') +
                     '<div class="task-meta">' +
                         (t.assigned_to ? t.assigned_to.split(',').map(function(n){var c=n.trim().toLowerCase();return '<span class=\"assign-badge '+c+'\">'+esc(n.trim())+'</span>';}).join('') : '') +
@@ -900,10 +917,11 @@ function renderTasks() {
             '<div class="task-info">' +
                 '<div class="task-title">' + esc(t.title) + '</div>' +
                 (t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : '') +
+                imageHtml +
                 (t.due_at ? '<div class="task-due' + ((isOverdue || ipOverdue) ? ' urgent' : '') + '">' + timeStr + dueLabel + '</div>' : '') +
                 '<div class="task-meta">'+
                     (recLabel ? '<span class="tag recur">'+recLabel+'</span>' : '')+
-                    (t.assigned_to ? t.assigned_to.split(',').map(function(n){var c=n.trim().toLowerCase();return '<span class=\"assign-badge '+c+'\">'+esc(n.trim())+'</span>';}).join('') : '')+
+                    (t.assigned_to ? t.assigned_to.split(',').map(function(n){var c=n.trim().toLowerCase();return '<span class="assign-badge '+c+'">'+esc(n.trim())+'</span>';}).join('') : '')+
                     (doneBy ? '<span class="tag done-by">&check; '+esc(doneBy)+'</span>' : '')+
                 '</div>'+
             '</div>'+
@@ -1125,13 +1143,14 @@ async function addTask() {
     const title = document.getElementById('newTaskTitle').value.trim();
     if (!title) return;
     const description = document.getElementById('newTaskDesc').value.trim();
+    let taskId = null;
     if (currentType === 'reminder') {
         const startVal = document.getElementById('newReminderStart').value;
         const endVal = document.getElementById('newReminderEnd').value;
         const assigned = getAssignValue('newReminderAssigned');
         const remindTimes = getRemindValue('newRemRemindChips');
         if (!startVal) { showToast('Please pick a start date'); return; }
-        await api('POST', '/api/tasks', {
+        const result = await api('POST', '/api/tasks', {
             title, description, assigned_to: assigned,
             start_at: startVal,
             due_at: endVal || startVal,
@@ -1139,6 +1158,7 @@ async function addTask() {
             is_reminder: true,
             remind_times: remindTimes
         });
+        taskId = result.id;
     } else {
         const dueInput = document.getElementById('newTaskDue').value;
         const recurrence = document.getElementById('newTaskRecur').value;
@@ -1147,13 +1167,23 @@ async function addTask() {
         const remindTimes = getRemindValue('newRemindChips');
         let due_at = null;
         if (dueInput) { due_at = new Date(dueInput).toISOString(); }
-        await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, assigned_to: assigned, remind_times: remindTimes });
+        const result = await api('POST', '/api/tasks', { title, description, due_at, recurrence, priority, assigned_to: assigned, remind_times: remindTimes });
+        taskId = result.id;
+    }
+    // Upload image if selected
+    if (selectedImageFile && taskId) {
+        try {
+            await uploadTaskImage(taskId, selectedImageFile);
+        } catch (e) {
+            showToast('Image upload failed: ' + e.message);
+        }
     }
     document.getElementById('newTaskTitle').value='';
     document.getElementById('newTaskDesc').value='';
     document.getElementById('newTaskDue').value='';
     document.getElementById('newTaskRecur').value='none';
     document.getElementById('newTaskRemindBefore').value='0';
+    clearImage();
     await loadTasks();
 }
 
@@ -1250,13 +1280,66 @@ function removeCompleter(el) {
     const name = el.dataset.name;
     selectedCompleters.delete(name);
     updateSelectedPreview();
-    // Deselect matching pill
-    document.querySelectorAll('.user-pill.selected').forEach(p => {
-        const idx = parseInt(p.dataset.idx);
-        if (!isNaN(idx) && cachedUsers[idx] && cachedUsers[idx].username === name) {
-            p.classList.remove('selected');
-        }
+}
+
+// ---------- Image Handling ----------
+let selectedImageFile = null;
+
+function handleImageSelect(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    // Check size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+        showToast('Image too large (max 5MB)');
+        input.value = '';
+        return;
+    }
+    
+    selectedImageFile = file;
+    document.getElementById('imageLabel').textContent = file.name;
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById('previewImg').src = e.target.result;
+        document.getElementById('imagePreview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearImage() {
+    selectedImageFile = null;
+    document.getElementById('newTaskImage').value = '';
+    document.getElementById('imageLabel').textContent = 'Add photo...';
+    document.getElementById('imagePreview').style.display = 'none';
+    document.getElementById('previewImg').src = '';
+}
+
+async function uploadTaskImage(taskId, file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('/api/tasks/' + taskId + '/image', {
+        method: 'POST',
+        body: formData
     });
+    
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Upload failed');
+    }
+    
+    return await response.json();
+}
+
+function viewImage(src) {
+    // Simple lightbox
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML = '<img src="' + src + '" style="max-width:100%;max-height:90vh;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.3)" onclick="event.stopPropagation()">';
+    overlay.onclick = function() { document.body.removeChild(overlay); };
+    document.body.appendChild(overlay);
 }
 
 function closeCompleteModal() { document.getElementById('completeModal').classList.remove('show'); pendingCompleteId=null; }
