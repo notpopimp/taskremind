@@ -1447,7 +1447,7 @@ def export_tasks(request: Request, fmt: str = "json"):
 import base64
 from datetime import datetime, timedelta
 
-IMAGE_RETENTION_DAYS = int(os.environ.get("IMAGE_RETENTION_DAYS", "30"))
+IMAGE_RETENTION_DAYS = int(os.environ.get("IMAGE_RETENTION_DAYS", "90"))
 MAX_IMAGE_SIZE_MB = int(os.environ.get("MAX_IMAGE_SIZE_MB", "5"))
 
 def cleanup_expired_images():
