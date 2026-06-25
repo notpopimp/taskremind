@@ -214,7 +214,46 @@ def init_db():
             covered_by TEXT DEFAULT '',
             created_at TEXT NOT NULL
         )
-    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# ---------- Remove fake users ----------
+def remove_fake_users():
+    """Remove test and fake users from database."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM users WHERE username IN ('Hermes-cron', 'test', 'testuser')")
+    deleted = cur.rowcount
+    if deleted > 0:
+        print(f"Removed {deleted} fake users")
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# ---------- Remove fake users ----------
+def remove_fake_users():
+    """Remove test and fake users from database."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM users WHERE username IN ('Hermes-cron', 'test', 'testuser')")
+    deleted = cur.rowcount
+    if deleted > 0:
+        print(f"Removed {deleted} fake users")
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# ---------- Remove fake users ----------
+def remove_fake_users():
+    """Remove test and fake users from database."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM users WHERE username IN ('Hermes-cron', 'test', 'testuser')")
+    deleted = cur.rowcount
+    if deleted > 0:
+        print(f"Removed {deleted} fake users")
+    conn.commit()
     cur.close()
     conn.close()
 
@@ -226,7 +265,7 @@ SEED_USERS = {
 }
 
 def seed_users():
-    """Create missing users only — never overwrite existing PINs."""
+    """Create missing users only - never overwrite existing PINs."""
     conn = get_db()
     cur = conn.cursor()
     for name, info in SEED_USERS.items():
@@ -265,7 +304,7 @@ jinja_env = Environment(
 )
 
 class NoCacheTemplates:
-    """Bypass Starlette's broken Jinja2Templates cache (Starlette 1.0.0 bug)."""
+    """Bypass Starlette broken Jinja2Templates cache (Starlette 1.0.0 bug)."""
     def __init__(self, env):
         self.env = env
     def TemplateResponse(self, name, context):
@@ -358,7 +397,7 @@ def index(request: Request):
         return HTMLResponse("""
         <html><body style="font-family:sans-serif;background:#f0f2f5;color:#1a1a2e;display:flex;align-items:center;justify-content:center;height:100vh">
         <div style="text-align:center">
-            <h1 style="color:#4165e1">🧭 Waypoint</h1>
+            <h1 style="color:#4165e1">Waypoint</h1>
             <p style="color:#e53935">Database not configured yet.</p>
             <p style="color:#98a2b3">Set <code>DATABASE_URL</code> in Railway Variables, then redeploy.</p>
         </div></body></html>
