@@ -335,6 +335,15 @@ def get_user_role(uid: str) -> str:
     conn.close()
     return row["role"] if row else "user"
 
+def get_username_by_id(uid: str) -> str:
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT username FROM users WHERE id = %s", (uid,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row["username"] if row else "Someone"
+
 def require_admin(uid: str):
     if get_user_role(uid) != "admin":
         raise HTTPException(403, "Only admin can perform this action")
@@ -576,6 +585,41 @@ def rename_user(request: Request, user_id: str, body: dict):
     cur.close()
     conn.close()
     return {"ok": True, "username": new_name}
+
+# ---------- Push on Assignment ----------
+def notify_assigned(assigned_to: str, task_title: str, assigner_name: str):
+    """Send push to any of Ben/Rachel/Sam named in assigned_to."""
+    if not assigned_to:
+        return
+    names = [n.strip() for n in assigned_to.split(",") if n.strip()]
+    if not names:
+        return
+    vapid_private = os.environ.get("VAPID_PRIVATE_KEY", "")
+    if not vapid_private:
+        return
+    conn = get_db()
+    cur = conn.cursor()
+    placeholders = ",".join(["%s"] * len(names))
+    cur.execute(f"SELECT u.id FROM users u WHERE u.username IN ({placeholders})", names)
+    user_ids = [r["id"] for r in cur.fetchall()]
+    for uid in user_ids:
+        cur.execute("SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = %s", (uid,))
+        subs = cur.fetchall()
+        payload = json.dumps({"title": "📋 New Task Assigned", "body": f"{assigner_name} assigned you: {task_title}"})
+        for sub in subs:
+            try:
+                from pywebpush import webpush
+                webpush(
+                    subscription_info={"endpoint": sub["endpoint"], "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]}},
+                    data=payload,
+                    vapid_private_key=vapid_private,
+                    vapid_claims={"sub": "mailto:cagesliquidators@yahoo.com"},
+                )
+            except Exception as e:
+                if "410" in str(e) or "expired" in str(e).lower():
+                    cur.execute("DELETE FROM push_subs WHERE endpoint = %s", (sub["endpoint"],))
+    cur.close()
+    conn.close()
 
 # ---------- Push Notifications ----------
 @app.post("/api/push/subscribe")
@@ -880,6 +924,12 @@ def create_task(request: Request, body: TaskCreate):
     task = cur.fetchone()
     cur.close()
     conn.close()
+    if body.assigned_to:
+        try:
+            assigner = get_username_by_id(uid)
+            notify_assigned(body.assigned_to, body.title, assigner)
+        except Exception:
+            pass
     return dict(task)
 
 @app.post("/api/tasks/{task_id}/toggle")
@@ -990,6 +1040,11 @@ def update_task(request: Request, task_id: str, body: TaskUpdate):
         cur.execute("UPDATE tasks SET priority = %s WHERE id = %s", (body.priority, task_id))
     if body.assigned_to is not None:
         cur.execute("UPDATE tasks SET assigned_to = %s WHERE id = %s", (body.assigned_to, task_id))
+        try:
+            assigner = get_username_by_id(uid)
+            notify_assigned(body.assigned_to, task.get("title", "a task"), assigner)
+        except Exception:
+            pass
     if body.start_at is not None:
         cur.execute("UPDATE tasks SET start_at = %s WHERE id = %s", (body.start_at or None, task_id))
     if body.is_reminder is not None:

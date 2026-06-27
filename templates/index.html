@@ -237,6 +237,15 @@
         .task-meta .tag.cat { background: rgba(154,101,225,0.1); color: #7c4dff; }
         .task-meta .tag.done-by { background: rgba(67,160,71,0.1); color: #2e7d32; }
 
+        .person-filter {
+            padding: 5px 14px; border-radius: 20px; border: 1.5px solid #d0d5dd;
+            background: white; color: #667788; font-size: 13px; cursor: pointer; font-weight: 500;
+            transition: all 0.15s;
+        }
+        .person-filter.active { border-color: #4165e1; background: #4165e1; color: white; }
+        .person-filter[data-person="Ben"].active { background: #4165e1; border-color: #4165e1; }
+        .person-filter[data-person="Rachel"].active { background: #e8526b; border-color: #e8526b; }
+        .person-filter[data-person="Sam"].active { background: #27ae60; border-color: #27ae60; }
         .assign-badge {
             display: inline-block; padding: 2px 8px; border-radius: 10px;
             font-size: 11px; font-weight: 600;
@@ -567,6 +576,12 @@
         <button class="tab" onclick="switchTab('reminders',this)">⏰ Reminders</button>
         <button class="tab" onclick="switchTab('timeoff',this)">🏖 Time Off & Attendance</button>
     </div>
+    <div id="personFilterBar" style="display:flex;gap:6px;padding:8px 12px 0;flex-wrap:wrap">
+        <button class="person-filter active" data-person="all" onclick="setPersonFilter('all',this)">All</button>
+        <button class="person-filter" data-person="Ben" onclick="setPersonFilter('Ben',this)">Ben</button>
+        <button class="person-filter" data-person="Rachel" onclick="setPersonFilter('Rachel',this)">Rachel</button>
+        <button class="person-filter" data-person="Sam" onclick="setPersonFilter('Sam',this)">Sam</button>
+    </div>
     <div class="task-list-view" id="taskList"></div>
     <div class="task-list-view" id="timeoffList" style="display:none"></div>
     <div class="task-list-view" id="attendanceView" style="display:none"></div>
@@ -758,6 +773,7 @@
 <script>
 let tasks = [];
 let currentTab = 'tasks';
+let personFilter = 'all';
 let calYear = 0, calMonth = 0;
 let pendingCompleteId = null;
 let notesWithContent = new Set();
@@ -814,6 +830,13 @@ function setRemindValue(containerId, value) {
     });
 }
 
+function setPersonFilter(person, btn) {
+    personFilter = person;
+    document.querySelectorAll('.person-filter').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderTasks();
+}
+
 function handleSearch() {
     if (currentTab === 'tasks' || currentTab === 'reminders') {
         renderTasks();
@@ -826,6 +849,11 @@ function renderTasks() {
     const q = document.getElementById('searchInput').value.toLowerCase().trim();
     let filtered = tasks;
     if (q) filtered = filtered.filter(t => t.title.toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q));
+
+    // Person filter
+    if (personFilter !== 'all') {
+        filtered = filtered.filter(t => (t.assigned_to || '').split(',').map(n => n.trim()).includes(personFilter));
+    }
 
     // If on reminders tab, only show reminders; if on tasks tab, only show tasks
     if (currentTab === 'reminders') {
@@ -956,6 +984,7 @@ function switchTab(tab, btn) {
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
     if (btn) btn.classList.add('active');
 
+    document.getElementById('personFilterBar').style.display = (tab === 'tasks' || tab === 'reminders') ? 'flex' : 'none';
     document.getElementById('taskList').style.display = (tab === 'tasks' || tab === 'reminders') ? '' : 'none';
     document.getElementById('timeoffList').style.display = tab === 'timeoff' ? '' : 'none';
     document.getElementById('attendanceView').style.display = tab === 'timeoff' ? '' : 'none';
