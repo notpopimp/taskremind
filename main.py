@@ -214,6 +214,7 @@ def init_db():
             covered_by TEXT DEFAULT '',
             created_at TEXT NOT NULL
         )
+    """)
     conn.commit()
     cur.close()
     conn.close()
