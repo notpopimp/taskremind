@@ -855,9 +855,12 @@ def list_tasks(request: Request):
     uid = get_user(request)
     conn = get_db()
     cur = conn.cursor()
+    cur.execute("SELECT username FROM users WHERE id = %s", (uid,))
+    user_row = cur.fetchone()
+    username = user_row["username"] if user_row else ""
     cur.execute(
-        "SELECT *, CASE WHEN in_progress=1 THEN 0 WHEN completed=0 THEN 1 ELSE 2 END as sort_order FROM tasks WHERE user_id = %s ORDER BY sort_order ASC, due_at ASC",
-        (uid,),
+        "SELECT *, CASE WHEN in_progress=1 THEN 0 WHEN completed=0 THEN 1 ELSE 2 END as sort_order FROM tasks WHERE user_id = %s OR assigned_to ILIKE %s ORDER BY sort_order ASC, due_at ASC",
+        (uid, f"%{username}%"),
     )
     rows = cur.fetchall()
     cur.close()
@@ -1007,9 +1010,12 @@ def calendar_tasks(request: Request):
     uid = get_user(request)
     conn = get_db()
     cur = conn.cursor()
+    cur.execute("SELECT username FROM users WHERE id = %s", (uid,))
+    user_row = cur.fetchone()
+    username = user_row["username"] if user_row else ""
     cur.execute(
-        "SELECT * FROM tasks WHERE user_id = %s AND (completed = 0 OR is_reminder = 1) AND due_at IS NOT NULL ORDER BY due_at ASC",
-        (uid,),
+        "SELECT * FROM tasks WHERE (user_id = %s OR assigned_to ILIKE %s) AND (completed = 0 OR is_reminder = 1) AND due_at IS NOT NULL ORDER BY due_at ASC",
+        (uid, f"%{username}%"),
     )
     rows = cur.fetchall()
     cur.close()
