@@ -223,36 +223,10 @@ def remove_fake_users():
     """Remove test and fake users from database."""
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("DELETE FROM users WHERE username IN ('Hermes-cron', 'test', 'testuser')")
+    cur.execute("DELETE FROM users WHERE username NOT IN ('Ben', 'Rachel', 'Sam')")
     deleted = cur.rowcount
     if deleted > 0:
-        print(f"Removed {deleted} fake users")
-    conn.commit()
-    cur.close()
-    conn.close()
-
-# ---------- Remove fake users ----------
-def remove_fake_users():
-    """Remove test and fake users from database."""
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM users WHERE username IN ('Hermes-cron', 'test', 'testuser')")
-    deleted = cur.rowcount
-    if deleted > 0:
-        print(f"Removed {deleted} fake users")
-    conn.commit()
-    cur.close()
-    conn.close()
-
-# ---------- Remove fake users ----------
-def remove_fake_users():
-    """Remove test and fake users from database."""
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM users WHERE username IN ('Hermes-cron', 'test', 'testuser')")
-    deleted = cur.rowcount
-    if deleted > 0:
-        print(f"Removed {deleted} fake users")
+        print(f"Removed {deleted} fake/rogue users")
     conn.commit()
     cur.close()
     conn.close()
@@ -321,6 +295,7 @@ def startup():
     global db_ready
     try:
         init_db()
+        remove_fake_users()
         seed_users()
         db_ready = True
         print("Database OK")
@@ -574,7 +549,7 @@ def list_users(request: Request):
     uid = get_user(request)  # any logged-in user can list
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, username, created_at FROM users ORDER BY username ASC")
+    cur.execute("SELECT id, username, created_at FROM users WHERE username IN ('Ben', 'Rachel', 'Sam') ORDER BY username ASC")
     users = [dict(r) for r in cur.fetchall()]
     cur.close()
     conn.close()
