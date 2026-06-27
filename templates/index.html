@@ -16,13 +16,16 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #eef0f5; color: #1a1a2e; min-height: 100vh; padding: 0 0 80px 0;
+            background: linear-gradient(160deg, #e8ecf6 0%, #f0f3f8 60%, #eaecf5 100%);
+            background-attachment: fixed;
+            color: #1a1a2e; min-height: 100vh; padding: 0 0 80px 0;
         }
         .header {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 80%, #4165e1 100%);
             padding: 16px 20px;
             display: flex; justify-content: space-between; align-items: center;
             border-bottom: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.22);
             position: sticky; top: 0; z-index: 10; color: white;
         }
         .header h1 { font-size: 20px; font-weight: 700; }
@@ -62,7 +65,7 @@
         .toolbar {
             margin: 12px 16px;
             background: white; border-radius: 16px;
-            padding: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            padding: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
         }
         .search-row {
             display: flex; gap: 8px; margin-bottom: 10px;
@@ -91,7 +94,7 @@
             border-radius: 10px; color: white; font-weight: 600;
             cursor: pointer; transition: background 0.2s;
         }
-        .add-row button:hover { background: #3451c4; }
+        .add-row button:hover { background: #3451c4; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(65,101,225,0.4); }
 
         .add-options {
             display: flex; gap: 8px; flex-wrap: wrap;
@@ -132,17 +135,22 @@
             flex: 1; padding: 10px; text-align: center; font-size: 13px;
             cursor: pointer; color: #98a2b3; transition: all 0.2s;
             border: none; background: transparent; font-weight: 500;
+            position: relative;
         }
         .tab.active { color: #4165e1; background: rgba(65,101,225,0.08); font-weight: 600; }
+        .tab.active::after {
+            content: ''; position: absolute; bottom: 0; left: 20%; right: 20%;
+            height: 2px; background: #4165e1; border-radius: 1px 1px 0 0;
+        }
 
         .task-list-view { margin: 0 16px; }
         .task-item {
             background: white; border: 1px solid #e8ecf0;
             border-radius: 14px; padding: 14px 16px;
             margin-bottom: 8px; display: flex; align-items: center; gap: 12px;
-            transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
         }
-        .task-item:hover { border-color: #d0d5dd; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .task-item:hover { border-color: #c5cadd; box-shadow: 0 6px 20px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06); transform: translateY(-1px); }
         .task-item.completed { opacity: 0.5; }
         .task-item.completed .task-title { text-decoration: line-through; color: #98a2b3; }
         .task-item.in-progress { border-color: #fb8c00; border-left: 3px solid #fb8c00; background: #fffbf0; }
@@ -165,27 +173,31 @@
             border-radius: 50%; background: #fb8c00; opacity: 0.6;
         }
         .section-header {
-            font-size: 13px; font-weight: 600; color: #98a2b3;
+            font-size: 11px; font-weight: 700; color: #8896aa;
             padding: 10px 0 4px 2px; margin-top: 4px;
-            text-transform: uppercase; letter-spacing: 0.5px;
+            text-transform: uppercase; letter-spacing: 1px;
         }
         .status-badge {
             display: inline-flex; align-items: center; gap: 4px;
-            padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500;
-            cursor: pointer; border: 1px solid; flex-shrink: 0;
-            transition: all 0.15s; user-select: none;
+            padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;
+            cursor: pointer; border: 1.5px solid; flex-shrink: 0;
+            transition: all 0.2s; user-select: none; letter-spacing: 0.3px;
         }
-        .status-badge:hover { filter: brightness(0.95); }
+        .status-badge:hover { filter: brightness(0.93); transform: scale(0.97); }
         .status-badge.pending {
-            background: #f0f2f5; border-color: #d0d5dd; color: #667788;
+            background: #f0f2f5; border-color: #c8cdd8; color: #556677;
         }
+        .status-badge.pending::before { content: '○  '; font-size: 9px; }
         .status-badge.in_progress {
-            background: #fff3e0; border-color: #fb8c00; color: #e65100;
+            background: #fff4e0; border-color: #fb8c00; color: #c85000;
+            box-shadow: 0 1px 4px rgba(251,140,0,0.2);
         }
+        .status-badge.in_progress::before { content: '◑  '; font-size: 9px; }
         .status-badge.completed {
-            background: #e8f5e9; border-color: #43a047; color: #1b5e20;
+            background: #e6f4ea; border-color: #43a047; color: #1b5e20;
+            box-shadow: 0 1px 4px rgba(67,160,71,0.2);
         }
-        .status-badge.completed::before { content: '\2713\00a0'; font-weight: 700; }
+        .status-badge.completed::before { content: '✓  '; font-weight: 900; }
         .user-pill {
             display: inline-flex; align-items: center; gap: 4px;
             padding: 5px 12px; border-radius: 16px; font-size: 12px; font-weight: 500;
@@ -240,19 +252,31 @@
         .person-filter {
             padding: 5px 14px; border-radius: 20px; border: 1.5px solid #d0d5dd;
             background: white; color: #667788; font-size: 13px; cursor: pointer; font-weight: 500;
-            transition: all 0.15s;
+            transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px;
         }
-        .person-filter.active { border-color: #4165e1; background: #4165e1; color: white; }
-        .person-filter[data-person="Ben"].active { background: #4165e1; border-color: #4165e1; }
-        .person-filter[data-person="Rachel"].active { background: #e8526b; border-color: #e8526b; }
-        .person-filter[data-person="Sam"].active { background: #27ae60; border-color: #27ae60; }
+        .person-filter:hover { border-color: #b0b8cc; transform: translateY(-1px); }
+        .person-filter.active { border-color: #4165e1; background: #4165e1; color: white; box-shadow: 0 2px 8px rgba(65,101,225,0.35); }
+        .person-filter[data-person="Ben"].active { background: #4165e1; border-color: #4165e1; box-shadow: 0 2px 8px rgba(65,101,225,0.4); }
+        .person-filter[data-person="Rachel"].active { background: #e8526b; border-color: #e8526b; box-shadow: 0 2px 8px rgba(232,82,107,0.4); }
+        .person-filter[data-person="Sam"].active { background: #27ae60; border-color: #27ae60; box-shadow: 0 2px 8px rgba(39,174,96,0.4); }
+        .pf-init {
+            display: inline-flex; width: 18px; height: 18px; border-radius: 50%;
+            background: currentColor; color: white; font-size: 10px; font-weight: 700;
+            align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .person-filter[data-person="Ben"] .pf-init { background: #4165e1; color: white; }
+        .person-filter[data-person="Rachel"] .pf-init { background: #e8526b; color: white; }
+        .person-filter[data-person="Sam"] .pf-init { background: #27ae60; color: white; }
+        .person-filter.active .pf-init { background: rgba(255,255,255,0.3); color: white; }
         .assign-badge {
-            display: inline-block; padding: 2px 8px; border-radius: 10px;
-            font-size: 11px; font-weight: 600;
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 9px; border-radius: 12px;
+            font-size: 11px; font-weight: 700; border: 1px solid;
         }
-        .assign-badge.ben { background: rgba(65,101,225,0.1); color: #4165e1; }
-        .assign-badge.rachel { background: rgba(232,82,107,0.1); color: #e8526b; }
-        .assign-badge.sam { background: rgba(46,204,113,0.1); color: #27ae60; }
+        .assign-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; opacity: 0.8; }
+        .assign-badge.ben { background: rgba(65,101,225,0.09); color: #4165e1; border-color: rgba(65,101,225,0.2); }
+        .assign-badge.rachel { background: rgba(232,82,107,0.09); color: #d43f5c; border-color: rgba(232,82,107,0.2); }
+        .assign-badge.sam { background: rgba(39,174,96,0.09); color: #1e9650; border-color: rgba(39,174,96,0.2); }
         .assign-multi { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
         .assign-chip {
             display: inline-block; padding: 6px 14px; border-radius: 16px;
@@ -303,7 +327,7 @@
         .big-cal-day:nth-child(7n) { border-right: none; }
         .big-cal-day:hover { background: #f8f9fc; }
         .big-cal-day.other-month { opacity: 0.25; }
-        .big-cal-day.today { background: #eef4ff; }
+        .big-cal-day.today { background: #eef4ff; border-bottom: 2px solid #4165e1; }
         .big-cal-day .bday-num {
             font-size: 13px; font-weight: 600; color: #1a1a2e;
             width: 22px; height: 22px; display: inline-flex;
@@ -312,6 +336,7 @@
         }
         .big-cal-day.today .bday-num {
             background: #4165e1; color: white; border-radius: 50%;
+            box-shadow: 0 2px 6px rgba(65,101,225,0.4);
         }
         .bcal-item {
             font-size: 10px; line-height: 1.3; padding: 1px 3px;
@@ -357,7 +382,7 @@
 
         .modal-overlay {
             display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.4); z-index: 100;
+            background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); z-index: 100;
             align-items: center; justify-content: center;
         }
         .modal-overlay.show { display: flex; }
@@ -397,11 +422,19 @@
         .share-item { display: flex; justify-content: space-between; padding: 4px 0; }
         .share-item .delete-share { color: #e53935; cursor: pointer; background: none; border: none; font-size: 12px; }
 
-        .empty { text-align: center; color: #98a2b3; padding: 40px 20px; font-size: 14px; }
+        .empty {
+            text-align: center; color: #98a2b3; padding: 50px 20px; font-size: 14px;
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+        }
+        .empty::before { content: '📋'; font-size: 36px; opacity: 0.45; display: block; }
+        .empty-title { font-size: 15px; font-weight: 600; color: #778899; }
+        .empty-sub { font-size: 13px; color: #aab4c0; }
         .copy-toast {
             position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
-            background: #4165e1; color: white; padding: 10px 20px; border-radius: 10px;
-            font-size: 14px; font-weight: 500; display: none; z-index: 100;
+            background: linear-gradient(135deg, #4165e1, #2a4fd6);
+            color: white; padding: 10px 22px; border-radius: 24px;
+            font-size: 14px; font-weight: 600; display: none; z-index: 100;
+            box-shadow: 0 4px 16px rgba(65,101,225,0.45);
         }
         .copy-toast.show { display: block; }
         .snooze-wrap { position: relative; display: inline-block; }
@@ -450,6 +483,32 @@
             background: #4165e1; color: white; font-size: 13px; font-weight: 600;
             align-items: center; justify-content: center; margin-right: 8px; flex-shrink: 0;
         }
+
+        /* View toggle active indicator */
+        .view-btn { position: relative; }
+        .view-btn.active { color: #4165e1; background: rgba(65,101,225,0.08); font-weight: 600; }
+        .view-btn.active::after {
+            content: ''; position: absolute; bottom: 0; left: 20%; right: 20%;
+            height: 2px; background: #4165e1; border-radius: 1px 1px 0 0;
+        }
+
+        /* Assign chips — colored per person when selected */
+        .assign-chip[data-name="Ben"].selected { background: #4165e1; border-color: #4165e1; color: white; }
+        .assign-chip[data-name="Rachel"].selected { background: #e8526b; border-color: #e8526b; color: white; }
+        .assign-chip[data-name="Sam"].selected { background: #27ae60; border-color: #27ae60; color: white; }
+
+        /* Smooth scrollbar */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #c8cdd8; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a0a8b8; }
+
+        /* Task check bounce on done */
+        .task-check { transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1); }
+        .task-check.done { transform: scale(1.1); }
+
+        /* Modal box polish */
+        .modal-box { box-shadow: 0 16px 48px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.12); }
     </style>
 </head>
 <body>
@@ -578,9 +637,9 @@
     </div>
     <div id="personFilterBar" style="display:flex;gap:6px;padding:8px 12px 0;flex-wrap:wrap">
         <button class="person-filter active" data-person="all" onclick="setPersonFilter('all',this)">All</button>
-        <button class="person-filter" data-person="Ben" onclick="setPersonFilter('Ben',this)">Ben</button>
-        <button class="person-filter" data-person="Rachel" onclick="setPersonFilter('Rachel',this)">Rachel</button>
-        <button class="person-filter" data-person="Sam" onclick="setPersonFilter('Sam',this)">Sam</button>
+        <button class="person-filter" data-person="Ben" onclick="setPersonFilter('Ben',this)"><span class="pf-init">B</span>Ben</button>
+        <button class="person-filter" data-person="Rachel" onclick="setPersonFilter('Rachel',this)"><span class="pf-init">R</span>Rachel</button>
+        <button class="person-filter" data-person="Sam" onclick="setPersonFilter('Sam',this)"><span class="pf-init">S</span>Sam</button>
     </div>
     <div class="task-list-view" id="taskList"></div>
     <div class="task-list-view" id="timeoffList" style="display:none"></div>
@@ -864,7 +923,9 @@ function renderTasks() {
 
     const list = document.getElementById('taskList');
     if (!filtered.length) {
-        list.innerHTML = '<div class="empty">No tasks here yet</div>';
+        const emptyLabel = currentTab === 'reminders' ? 'No reminders yet' : 'No tasks here yet';
+        const emptySub = currentTab === 'reminders' ? 'Add a reminder above to get started' : 'Add a task above to get started';
+        list.innerHTML = '<div class="empty"><span class="empty-title">' + emptyLabel + '</span><span class="empty-sub">' + emptySub + '</span></div>';
         return;
     }
     const now = new Date().toISOString();
